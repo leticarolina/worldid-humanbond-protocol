@@ -133,6 +133,9 @@ contract AutomationFlowTest is Test {
         humanBond.divorce(bob);
         humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, PROOF);
         vm.stopPrank();
+
+        vm.prank(bob);
+        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, PROOF);
     }
 
     function test_propose_sucessfully_storeProposal() public proposalSent {

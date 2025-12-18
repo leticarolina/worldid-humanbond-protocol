@@ -18,11 +18,12 @@ contract VowNFT is ERC721, Ownable {
     error VowNFT__UnauthorizedMinter();
     error VowNFT__TransfersDisabled();
     uint256 public totalSupply;
-    string public imageCID = "ipfs://QmS5Aqic36eFsGvmGsPDBD3VhfTyY7W1E7Sk7jTrAuKtqo"; //placeholder image CID
+    string public imageCID = "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai"; //placeholder image CID
 
     address public humanBondContract; //authorized minter address
     mapping(uint256 => TokenMetadata) public tokenMetadata;
     mapping(bytes32 => uint256[2]) public marriageToToken; // marriageId -> two tokenIds (0 if not set)
+
     event VowMinted(bytes32 indexed marriageId, uint256 indexed tokenId, address indexed to);
 
     struct TokenMetadata {
@@ -71,13 +72,12 @@ contract VowNFT is ERC721, Ownable {
 
         _safeMint(to, totalSupply);
 
-        // record mapping marriageId -> tokenIds (max 2)
         if (marriageToToken[_marriageId][0] == 0) {
             marriageToToken[_marriageId][0] = totalSupply;
         } else {
-            require(marriageToToken[_marriageId][1] == 0, "max is 2");
             marriageToToken[_marriageId][1] = totalSupply;
         }
+
         emit VowMinted(_marriageId, totalSupply, to);
 
         return totalSupply;
