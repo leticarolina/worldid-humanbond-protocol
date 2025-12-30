@@ -32,12 +32,12 @@ The protocol handles everything autonomously: proposals, acceptance, yield, shar
 
 ### World Chain Mainnet
 
-- **Human Bond (Core Engine)**: [0x439f09efB4993A4Ee039ccf65e69CF3CC705D735](https://worldscan.org/address/0x439f09efB4993A4Ee039ccf65e69CF3CC705D735)
-- **Vow Dynamic Onchain NFT**: [0xED8f02196B1884657A8c3d17a516c2eEfcc3E2e1](https://worldscan.org/address/0xED8f02196B1884657A8c3d17a516c2eEfcc3E2e1)
+- **Human Bond (Core Engine)**: [0xB3cbCB0294995FE1aCD7187B94aEDBD4555c5A63](https://worldscan.org/address/0xB3cbCB0294995FE1aCD7187B94aEDBD4555c5A63)
+- **Vow Dynamic Onchain NFT**: [0x8c64c304854F9284ddb976918dF37Bd4f5949F22](https://worldscan.org/address/0x8c64c304854F9284ddb976918dF37Bd4f5949F22)
 - **Milestone Upgradeable NFT**: 
-[0xb12F9Ef0aF10a035B18BC00A26219c335111d587](https://worldscan.org/address/0xb12F9Ef0aF10a035B18BC00A26219c335111d587)
+[0x566c4a366625F08A714dd092f8bD2F0E86f906f5](https://worldscan.org/address/0x566c4a366625F08A714dd092f8bD2F0E86f906f5)
 - **TIME Token**:
-[0x1493BF2c2762b5C991835c63683bBBcD14C3cC43](https://worldscan.org/address/0x1493BF2c2762b5C991835c63683bBBcD14C3cC43)
+[0x39e629681a9db65D9352961d8dCD4C96C4A1169a](https://worldscan.org/address/0x39e629681a9db65D9352961d8dCD4C96C4A1169a)
 
 ### Contract Responsibilities
 
