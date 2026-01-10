@@ -27,7 +27,6 @@ contract HumanBond is Ownable {
     error HumanBond__NotProposedToYou();
     error HumanBond__AlreadyAccepted();
     error HumanBond__NothingToClaim();
-    error HumanBond__InvalidNullifier();
 
     /* ----------------------------- STRUCTS ----------------------------- */
     //Represents a pending bond request:
@@ -80,7 +79,6 @@ contract HumanBond is Ownable {
     mapping(address => uint256) public proposerIndex; // proposer address => index in proposalsFor[proposed]
     mapping(bytes32 => Marriage) public marriages;
     mapping(address => bytes32) public activeMarriageOf; // quick lookup of active marriage ID by user address
-    // mapping(uint256 => mapping(uint256 => bool)) public usedNullifier; //key usedNullifier by externalNullifier.
 
     bytes32[] public marriageIds; //So every couple has a unique “marriage fingerprint”
 
