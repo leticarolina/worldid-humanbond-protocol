@@ -38,7 +38,7 @@ contract VowNFT is ERC721, Ownable {
         _;
     }
 
-    function _onlyHumanBond() public view {
+    function _onlyHumanBond() internal view {
         if (msg.sender != humanBondContract) {
             revert VowNFT__UnauthorizedMinter();
         }

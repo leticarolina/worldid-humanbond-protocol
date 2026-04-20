@@ -128,6 +128,18 @@ V2 is a ground-up improvement aimed at reliability, gas-efficiency, and frontend
 - HumanBond integrates with the World ID Router contract.
 - As only Orb credentials are supported on-chain, all proof verifications use groupId = 1
 
+## Updates for v3
+
+**Protocol Tracking**
+
+- Added `activeMarriageCount` — live count of currently bonded couples
+- Added `totalDivorceCount` — total dissolutions ever recorded
+
+**Anti-Spam**
+
+- Added per-user divorce cooldown via `lastDivorceTimestamp` and `DIVORCE_COOLDOWN`
+- Prevents divorce → remarry spam cycles
+
 ## Written and refactored by
 
 Leticia Azevedo: Smart Contracts Developer (Brazil)
