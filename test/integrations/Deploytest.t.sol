@@ -26,7 +26,8 @@ contract DeployTest is Test {
             "propose-bond",
             "accept-bond",
             1 minutes,
-            3 minutes
+            3 minutes,
+            5 minutes
         );
 
         // Set milestone URIs

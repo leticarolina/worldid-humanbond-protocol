@@ -38,7 +38,8 @@ contract DeployScript is Script {
             actionPropose,
             actionAccept,
             1 days,
-            365 days
+            365 days,
+            30 days
         );
 
         //Link contracts

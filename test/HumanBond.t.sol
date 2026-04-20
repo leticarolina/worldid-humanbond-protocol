@@ -53,7 +53,8 @@ contract AutomationFlowTest is Test {
             "propose-bond",
             "accept-bond",
             1 minutes,
-            3 minutes
+            3 minutes,
+            5 minutes
         );
 
         // Wire up
