@@ -134,16 +134,6 @@ contract AutomationFlowTest is Test {
         humanBond.propose(address(0x02), NULLIFIER_PROPOSE + 2, 111, proof);
     }
 
-    // function test_propose_reverts_ifUsingSameNullifier() public proposalSent {
-    //     vm.prank(leticia);
-    //     humanBond.cancelProposal();
-    //     bool usedNullfier = humanBond.usedNullifier(humanBond.externalNullifierPropose(), NULLIFIER_PROPOSE);
-    //     assertEq(usedNullfier, true);
-
-    //     vm.expectRevert(HumanBond.HumanBond__InvalidNullifier.selector);
-    //     humanBond.propose(address(0x01), ROOT, NULLIFIER_PROPOSE, proof);
-    // }
-
     function test_propose_works_afterDivorce() public marriedCouple {
         vm.startPrank(leticia);
         humanBond.divorce(bob);
@@ -173,7 +163,7 @@ contract AutomationFlowTest is Test {
     function test_propose_emits_ProposalCreated() public {
         // Expect ProposalCreated
         vm.expectEmit(address(humanBond));
-        emit HumanBond.ProposalCreated(leticia, bob);
+        emit HumanBond.ProposalCreated(leticia, bob, block.timestamp);
 
         vm.prank(leticia);
         humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
@@ -201,17 +191,6 @@ contract AutomationFlowTest is Test {
         vm.expectRevert(HumanBond.HumanBond__CooldownActive.selector);
         humanBond.accept(address(0x04), ROOT, NULLIFIER_ACCEPT, proof);
     }
-
-    // function test_accept_reverts_ifNullifierAlreadyUsed() public marriedCouple {
-    //     // recreates a new proposal because accept() deletes it
-    //     vm.prank(leticia);
-    //     humanBond.propose(bob, ROOT, 1002, proof);
-
-    //     // bob tries to accept using SAME nullifier 2001 → should revert
-    //     vm.prank(bob);
-    //     vm.expectRevert(HumanBond.HumanBond__InvalidNullifier.selector);
-    //     humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
-    // }
 
     function test_accept_getMarriageId_recordsMarriageIdSymmetryAndPushToArray() public marriedCouple {
         MarriageIdHelper helper = new MarriageIdHelper();
@@ -252,6 +231,39 @@ contract AutomationFlowTest is Test {
 
         HumanBond.Proposal memory p = humanBond.getProposal(leticia);
         assertEq(p.proposer, address(0));
+    }
+
+    function test_accept_crossProposal_cleansUpBothSides() public {
+        // Both propose to each other before either accepts
+        vm.prank(leticia);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
+
+        vm.prank(bob);
+        humanBond.propose(leticia, ROOT, NULLIFIER_ACCEPT, proof);
+
+        // Bob's proposal should appear in leticia's incoming list
+        HumanBond.Proposal[] memory leticiaIncoming = humanBond.getIncomingProposals(leticia);
+        assertEq(leticiaIncoming.length, 1);
+        assertEq(leticiaIncoming[0].proposer, bob);
+
+        // Bob accepts leticia's proposal → crossProposed = true, both sides cleaned up
+        vm.prank(bob);
+        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
+
+        // Neither outgoing proposal should remain
+        HumanBond.Proposal memory leticiaProposal = humanBond.getProposal(leticia);
+        HumanBond.Proposal memory bobProposal = humanBond.getProposal(bob);
+        assertEq(leticiaProposal.proposer, address(0));
+        assertEq(bobProposal.proposer, address(0));
+
+        // Neither should appear in the other's incoming list
+        HumanBond.Proposal[] memory bobIncoming = humanBond.getIncomingProposals(bob);
+        leticiaIncoming = humanBond.getIncomingProposals(leticia);
+        assertEq(bobIncoming.length, 0);
+        assertEq(leticiaIncoming.length, 0);
+
+        // And they are married
+        assertEq(humanBond.isMarried(leticia, bob), true);
     }
 
     function test_accpet_MintsVowNFTandSendTokens() public marriedCouple {
@@ -653,9 +665,9 @@ contract AutomationFlowTest is Test {
         assertEq(incoming.length, 0);
     }
 
-    function test_rejectProposal_emits_ProposalCancelled() public proposalSent {
+    function test_rejectProposal_emits_ProposalRejected() public proposalSent {
         vm.expectEmit(address(humanBond));
-        emit HumanBond.ProposalCancelled(leticia, bob);
+        emit HumanBond.ProposalRejected(leticia, bob, block.timestamp);
 
         vm.prank(bob);
         humanBond.rejectProposal(leticia);
