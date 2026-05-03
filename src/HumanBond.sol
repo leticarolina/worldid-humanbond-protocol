@@ -28,6 +28,9 @@ contract HumanBond is Ownable {
     error HumanBond__AlreadyAccepted();
     error HumanBond__NothingToClaim();
     error HumanBond__CooldownActive();
+    error HumanBond__DivorceAlreadyRequested();
+    error HumanBond__NoDivorceRequest();
+    error HumanBond__DivorceDelayNotMet();
 
     /* ----------------------------- STRUCTS ----------------------------- */
     //Represents a pending bond request:
@@ -48,6 +51,12 @@ contract HumanBond is Ownable {
         uint256 bondStart;
         uint256 lastClaim;
         uint256 lastMilestoneYear;
+        bool active;
+    }
+
+    struct DivorceRequest {
+        address requester;
+        uint256 requestedAt;
         bool active;
     }
 
@@ -81,6 +90,7 @@ contract HumanBond is Ownable {
     mapping(bytes32 => Marriage) public marriages;
     mapping(address => bytes32) public activeMarriageOf; // quick lookup of active marriage ID by user address
     mapping(address => uint256) public lastDivorceTimestamp;
+    mapping(bytes32 => DivorceRequest) public divorceRequests;
 
     bytes32[] public marriageIds; //So every couple has a unique “marriage fingerprint”
 
@@ -92,8 +102,9 @@ contract HumanBond is Ownable {
     uint256 public immutable EXTERNAL_NULLIFIER_ACCEPT;
     uint256 public immutable DAY; // 1 day = 1 TIME token reward shared
     uint256 public immutable YEAR; // 1 YEAR = new milestone NFT eligibility
-    uint256 public immutable DIVORCE_COOLDOWN; // time after divorce during which a user cannot propose or accept new bonds
+    uint256 public immutable REBOND_COOLDOWN; // time after divorce during which a user cannot propose or accept new bonds
     uint256 public constant GROUP_ID = 1; // World ID Orb-only group. Required by World ID Route
+    uint256 public divorceDelay = 3 days; // delay for divorce to be finalized
 
     uint256 public activeMarriageCount;
     uint256 public totalDivorceCount;
@@ -106,6 +117,10 @@ contract HumanBond is Ownable {
     event MarriageDissolved(address indexed partnerA, address indexed partnerB, uint256 timestamp);
     event ProposalCancelled(address indexed proposer, address indexed proposed, uint256 timestamp);
     event ProposalRejected(address indexed proposer, address indexed proposed, uint256 timestamp);
+    event DivorceRequested(
+        address indexed partnerA, address indexed partnerB, address indexed requester, uint256 timestamp
+    );
+    event DivorceRequestCancelled(address indexed partnerA, address indexed partnerB, uint256 timestamp);
 
     /* --------------------------- CONSTRUCTOR -------------------------- */
     constructor(
@@ -133,7 +148,7 @@ contract HumanBond is Ownable {
             abi.encodePacked(abi.encodePacked(_appId).hashToField(), _actionAccept).hashToField();
         DAY = _day;
         YEAR = _year;
-        DIVORCE_COOLDOWN = _divorceCooldown;
+        REBOND_COOLDOWN = _divorceCooldown;
     }
 
     /* ---------------------------- FUNCTIONS --------------------------- */
@@ -144,7 +159,7 @@ contract HumanBond is Ownable {
     /// @param proposerNullifier The unique nullifier preventing proof re-use.
     /// @param proof The zero-knowledge proof array.
     function propose(address proposed, uint256 root, uint256 proposerNullifier, uint256[8] calldata proof) external {
-        if (block.timestamp - lastDivorceTimestamp[msg.sender] < DIVORCE_COOLDOWN) {
+        if (block.timestamp - lastDivorceTimestamp[msg.sender] < REBOND_COOLDOWN) {
             revert HumanBond__CooldownActive();
         }
         if (proposed == address(0)) {
@@ -186,7 +201,7 @@ contract HumanBond is Ownable {
         Proposal storage proposalOfProposer = proposals[proposer]; // the struct stored, previously created in propose()
         uint256 signalHash = abi.encodePacked(msg.sender).hashToField();
 
-        if (block.timestamp - lastDivorceTimestamp[msg.sender] < DIVORCE_COOLDOWN) {
+        if (block.timestamp - lastDivorceTimestamp[msg.sender] < REBOND_COOLDOWN) {
             revert HumanBond__CooldownActive();
         }
 
@@ -212,8 +227,6 @@ contract HumanBond is Ownable {
         if (marriages[marriageId].active) {
             revert HumanBond__UserAlreadyMarried();
         }
-
-        // proposalOfProposer.accepted = true;
 
         // Record bond data
         marriages[marriageId] = Marriage({
@@ -250,31 +263,50 @@ contract HumanBond is Ownable {
         emit ProposalAccepted(proposer, msg.sender, block.timestamp);
     }
 
-    /**
-     * @notice Allows either partner to dissolve the marriage.
-     *         Pending yield is distributed evenly, and both are marked unmarried.
-     */
-    function divorce(address partner) external {
-        bytes32 marriageId = _getMarriageId(msg.sender, partner); //reuses deterministic pair ID system.
+    /// @notice Owner can adjust the required waiting period between request and execution.
+    function setDivorceDelay(uint256 _delay) external onlyOwner {
+        divorceDelay = _delay;
+    }
+
+    /// @notice Initiate a divorce request. The requesting partner must wait divorceDelay before executing.
+    function requestDivorce(address partner) external {
+        bytes32 marriageId = _getMarriageId(msg.sender, partner);
         Marriage storage marriage = marriages[marriageId];
 
-        if (marriage.active == false) {
-            revert HumanBond__NoActiveMarriage();
-        }
+        if (!marriage.active) revert HumanBond__NoActiveMarriage();
         if (msg.sender != marriage.partnerA && msg.sender != marriage.partnerB) {
             revert HumanBond__NotYourMarriage();
         }
+        if (divorceRequests[marriageId].active) {
+            revert HumanBond__DivorceAlreadyRequested();
+        }
 
-        uint256 reward = _pendingYield(marriageId); //calculates how much tokens they earned since the last claim.
-        // Claim pending yield (1 token/day shared) before divorce
+        divorceRequests[marriageId] =
+            DivorceRequest({requester: msg.sender, requestedAt: block.timestamp, active: true});
+
+        emit DivorceRequested(marriage.partnerA, marriage.partnerB, msg.sender, block.timestamp);
+    }
+
+    /// @notice Execute a previously requested divorce once the delay has elapsed.
+    function executeDivorce(address partner) external {
+        bytes32 marriageId = _getMarriageId(msg.sender, partner);
+        Marriage storage marriage = marriages[marriageId];
+        DivorceRequest storage req = divorceRequests[marriageId];
+
+        if (!marriage.active) revert HumanBond__NoActiveMarriage();
+        if (!req.active) revert HumanBond__NoDivorceRequest();
+        if (msg.sender != req.requester) revert HumanBond__NotYourMarriage();
+        if (block.timestamp < req.requestedAt + divorceDelay) {
+            revert HumanBond__DivorceDelayNotMet();
+        }
+
+        uint256 reward = _pendingYield(marriageId);
         if (reward > 0) {
             uint256 split = reward / 2;
             TIME_TOKEN.mint(marriage.partnerA, split);
-            // TIME_TOKEN.mint(marriage.partnerB, split);
-            TIME_TOKEN.mint(marriage.partnerB, reward - split); // captures remainder
+            TIME_TOKEN.mint(marriage.partnerB, reward - split);
         }
 
-        // Mark marriage as inactive
         marriage.active = false;
         marriage.lastClaim = block.timestamp;
         lastDivorceTimestamp[marriage.partnerA] = block.timestamp;
@@ -282,11 +314,26 @@ contract HumanBond is Ownable {
         activeMarriageCount--;
         totalDivorceCount++;
 
-        // Allow remarriage
         activeMarriageOf[marriage.partnerA] = bytes32(0);
         activeMarriageOf[marriage.partnerB] = bytes32(0);
 
+        delete divorceRequests[marriageId];
+
         emit MarriageDissolved(marriage.partnerA, marriage.partnerB, block.timestamp);
+    }
+
+    /// @notice Cancel a pending divorce request. Only the requester can cancel.
+    function cancelDivorceRequest(address partner) external {
+        bytes32 marriageId = _getMarriageId(msg.sender, partner);
+        DivorceRequest storage req = divorceRequests[marriageId];
+
+        if (!req.active) revert HumanBond__NoDivorceRequest();
+        if (msg.sender != req.requester) revert HumanBond__NotYourMarriage();
+
+        Marriage storage marriage = marriages[marriageId];
+        delete divorceRequests[marriageId];
+
+        emit DivorceRequestCancelled(marriage.partnerA, marriage.partnerB, block.timestamp);
     }
 
     /* ---------------------------- YIELD LOGIC --------------------------- */

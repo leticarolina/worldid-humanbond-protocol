@@ -25,9 +25,9 @@ contract DeployTest is Test {
             "app_bfc3261816aeadc589f9c6f80a98f5df",
             "propose-bond",
             "accept-bond",
-            1 minutes,
-            3 minutes,
-            5 minutes
+            1 days,
+            365 days,
+            30 days
         );
 
         // Set milestone URIs

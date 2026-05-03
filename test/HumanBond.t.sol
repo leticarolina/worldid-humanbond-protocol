@@ -66,9 +66,21 @@ contract AutomationFlowTest is Test {
         vm.deal(leticia, 10 ether);
         vm.deal(bob, 10 ether);
 
-        // Push block.timestamp past DIVORCE_COOLDOWN so fresh users (lastDivorceTimestamp=0)
+        // Set divorce delay to 1 minute so tests can exercise the two-step flow quickly
+        humanBond.setDivorceDelay(1 minutes);
+
+        // Push block.timestamp past REBOND_COOLDOWN so fresh users (lastDivorceTimestamp=0)
         // don't hit HumanBond__CooldownActive. Foundry starts at timestamp=1 which is < cooldown.
-        vm.warp(humanBond.DIVORCE_COOLDOWN() + 1);
+        vm.warp(humanBond.REBOND_COOLDOWN() + 1);
+    }
+
+    /// @dev Helper: perform a full two-step divorce (request + wait + execute) as `from`.
+    function _divorce(address from, address partner) internal {
+        vm.prank(from);
+        humanBond.requestDivorce(partner);
+        skip(humanBond.divorceDelay() + 1);
+        vm.prank(from);
+        humanBond.executeDivorce(partner);
     }
 
     //============================ MODIFIERS ============================//
@@ -96,9 +108,8 @@ contract AutomationFlowTest is Test {
     //=====================================================================================//
 
     function test_propose_reverts_ifCooldownActive() public marriedCouple {
-        // Leticia divorces Bob to trigger cooldown
-        vm.prank(leticia);
-        humanBond.divorce(bob);
+        // Leticia divorces Bob to trigger cooldown (delay = 1 min, cooldown = 5 min — still in cooldown after)
+        _divorce(leticia, bob);
 
         // Attempt to propose during cooldown
         vm.prank(leticia);
@@ -135,12 +146,10 @@ contract AutomationFlowTest is Test {
     }
 
     function test_propose_works_afterDivorce() public marriedCouple {
-        vm.startPrank(leticia);
-        humanBond.divorce(bob);
-        vm.stopPrank();
+        _divorce(leticia, bob);
 
-        // Wait out the divorce cooldown before remarrying
-        skip(humanBond.DIVORCE_COOLDOWN() + 1);
+        // Wait out the rebond cooldown before remarrying
+        skip(humanBond.REBOND_COOLDOWN() + 1);
 
         vm.startPrank(leticia);
         humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
@@ -178,9 +187,8 @@ contract AutomationFlowTest is Test {
     }
 
     function test_accept_reverts_ifCooldownActive() public marriedCouple {
-        // Leticia divorces Bob to trigger cooldown
-        vm.prank(leticia);
-        humanBond.divorce(bob);
+        // Leticia divorces Bob to trigger cooldown (delay = 1 min, cooldown = 5 min)
+        _divorce(leticia, bob);
 
         // Attempt to accept during cooldown
         vm.startPrank(address(0x04));
@@ -278,8 +286,7 @@ contract AutomationFlowTest is Test {
 
     function test_pendingYield_returnsZeroWhenMarriageInactive() public marriedCouple {
         // Kill marriage
-        vm.prank(leticia);
-        humanBond.divorce(bob);
+        _divorce(leticia, bob);
 
         uint256 pending = humanBond.getPendingYield(leticia, bob);
         assertEq(pending, 0);
@@ -482,45 +489,167 @@ contract AutomationFlowTest is Test {
     //==================================  DIVORCE TESTS ===============================//
     //=================================================================================//
 
-    function test_divorce_reverts_ifNotActiveMarriage() public {
+    // --- requestDivorce ---
+
+    function test_requestDivorce_reverts_ifNoActiveMarriage() public {
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__NoActiveMarriage.selector);
-        humanBond.divorce(bob);
+        humanBond.requestDivorce(bob);
     }
 
-    function test_divorce_reverts_ifNotYourMarriage() public marriedCouple {
-        // attacker tries to divorce them
+    function test_requestDivorce_reverts_ifNotYourMarriage() public marriedCouple {
         address attacker = makeAddr("attacker");
-
         vm.prank(attacker);
         vm.expectRevert(HumanBond.HumanBond__NoActiveMarriage.selector);
-        humanBond.divorce(leticia);
+        humanBond.requestDivorce(leticia);
     }
 
-    function test_divorce_claimsPendingYieldAndSplitsEvenly() public marriedCouple {
-        // simulate 20 minutes (20 TIME)
+    function test_requestDivorce_reverts_ifAlreadyRequested() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__DivorceAlreadyRequested.selector);
+        humanBond.requestDivorce(bob);
+    }
+
+    function test_requestDivorce_storesRequestCorrectly() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+
+        bytes32 id = humanBond.getMarriageId(leticia, bob);
+        (address requester, uint256 requestedAt, bool active) = humanBond.divorceRequests(id);
+
+        assertEq(requester, leticia);
+        assertEq(requestedAt, block.timestamp);
+        assertEq(active, true);
+    }
+
+    function test_requestDivorce_emits_DivorceRequested() public marriedCouple {
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.DivorceRequested(leticia, bob, leticia, block.timestamp);
+
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+    }
+
+    // --- executeDivorce ---
+
+    function test_executeDivorce_reverts_ifNoDivorceRequest() public marriedCouple {
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__NoDivorceRequest.selector);
+        humanBond.executeDivorce(bob);
+    }
+
+    function test_executeDivorce_reverts_ifDelayNotMet() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+
+        // Try immediately — delay not met
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__DivorceDelayNotMet.selector);
+        humanBond.executeDivorce(bob);
+    }
+
+    function test_executeDivorce_reverts_ifNotRequester() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+        skip(humanBond.divorceDelay() + 1);
+
+        // Bob tries to execute a request that leticia filed
+        vm.prank(bob);
+        vm.expectRevert(HumanBond.HumanBond__NotYourMarriage.selector);
+        humanBond.executeDivorce(leticia);
+    }
+
+    function test_executeDivorce_claimsPendingYieldAndSplits() public marriedCouple {
         skip(20 minutes);
 
-        uint256 expectedSplit = (20 ether) / 2;
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+        skip(humanBond.divorceDelay() + 1); // adds 1 more minute → total 21 minutes elapsed
+
+        // total reward = 21 ether; split = 10 (partnerA), 11 (partnerB captures remainder)
+        uint256 total = 21 ether;
 
         vm.prank(leticia);
-        humanBond.divorce(bob);
+        humanBond.executeDivorce(bob);
 
-        // each receives initial 1 + 10
-        assertEq(timeToken.balanceOf(leticia), 1 ether + expectedSplit);
-        assertEq(timeToken.balanceOf(bob), 1 ether + expectedSplit);
-
-        // marriage should now be inactive
-        bool active = humanBond.isMarried(leticia, bob);
-        assertEq(active, false);
+        assertEq(timeToken.balanceOf(leticia), 1 ether + total / 2);
+        assertEq(timeToken.balanceOf(bob), 1 ether + (total - total / 2));
+        assertEq(humanBond.isMarried(leticia, bob), false);
     }
 
-    function test_divorce_resetsActiveMarriageMapping() public marriedCouple {
-        vm.prank(leticia);
-        humanBond.divorce(bob);
+    function test_executeDivorce_resetsActiveMarriageMapping() public marriedCouple {
+        _divorce(leticia, bob);
 
         assertEq(humanBond.activeMarriageOf(leticia), bytes32(0));
         assertEq(humanBond.activeMarriageOf(bob), bytes32(0));
+    }
+
+    function test_executeDivorce_deletesDivorceRequest() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+        skip(humanBond.divorceDelay() + 1);
+
+        vm.prank(leticia);
+        humanBond.executeDivorce(bob);
+
+        bytes32 id = humanBond.getMarriageId(leticia, bob);
+        (,, bool active) = humanBond.divorceRequests(id);
+        assertEq(active, false);
+    }
+
+    // --- cancelDivorceRequest ---
+
+    function test_cancelDivorceRequest_reverts_ifNoDivorceRequest() public marriedCouple {
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__NoDivorceRequest.selector);
+        humanBond.cancelDivorceRequest(bob);
+    }
+
+    function test_cancelDivorceRequest_reverts_ifNotRequester() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+
+        vm.prank(bob);
+        vm.expectRevert(HumanBond.HumanBond__NotYourMarriage.selector);
+        humanBond.cancelDivorceRequest(leticia);
+    }
+
+    function test_cancelDivorceRequest_clearsRequest() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+
+        vm.prank(leticia);
+        humanBond.cancelDivorceRequest(bob);
+
+        bytes32 id = humanBond.getMarriageId(leticia, bob);
+        (,, bool active) = humanBond.divorceRequests(id);
+        assertEq(active, false);
+    }
+
+    function test_cancelDivorceRequest_allowsNewRequest() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+
+        vm.prank(leticia);
+        humanBond.cancelDivorceRequest(bob);
+
+        // Should not revert — DivorceAlreadyRequested is cleared
+        vm.prank(bob);
+        humanBond.requestDivorce(leticia);
+    }
+
+    function test_cancelDivorceRequest_emits_DivorceRequestCancelled() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.requestDivorce(bob);
+
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.DivorceRequestCancelled(leticia, bob, block.timestamp);
+
+        vm.prank(leticia);
+        humanBond.cancelDivorceRequest(bob);
     }
 
     //============================ PROPOSAL TESTS =======================================//
@@ -782,8 +911,7 @@ contract AutomationFlowTest is Test {
     }
 
     function test_activeMarriageCount_decrementsOnDivorce() public marriedCouple {
-        vm.prank(leticia);
-        humanBond.divorce(bob);
+        _divorce(leticia, bob);
 
         assertEq(humanBond.activeMarriageCount(), 0);
     }
@@ -807,8 +935,7 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.activeMarriageCount(), 2);
 
         // One divorce → count drops to 1
-        vm.prank(alice);
-        humanBond.divorce(carol);
+        _divorce(alice, carol);
 
         assertEq(humanBond.activeMarriageCount(), 1);
     }
@@ -816,18 +943,16 @@ contract AutomationFlowTest is Test {
     function test_totalDivorceCount_incrementsOnDivorce() public marriedCouple {
         assertEq(humanBond.totalDivorceCount(), 0);
 
-        vm.prank(leticia);
-        humanBond.divorce(bob);
+        _divorce(leticia, bob);
 
         assertEq(humanBond.totalDivorceCount(), 1);
     }
 
     function test_totalDivorceCount_doesNotDecrementOnRemarry() public marriedCouple {
-        vm.prank(leticia);
-        humanBond.divorce(bob);
+        _divorce(leticia, bob);
 
-        // Wait out cooldown and remarry
-        skip(humanBond.DIVORCE_COOLDOWN() + 1);
+        // Wait out rebond cooldown and remarry
+        skip(humanBond.REBOND_COOLDOWN() + 1);
 
         vm.prank(leticia);
         humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
@@ -858,10 +983,9 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.activeMarriageCount(), 3);
         assertEq(humanBond.totalDivorceCount(), 0);
 
-        // Divorce all 3
+        // Divorce all 3 — each _divorce skips divorceDelay, which is fine for counter tests
         for (uint256 i = 0; i < 3; i++) {
-            vm.prank(proposers[i]);
-            humanBond.divorce(acceptors[i]);
+            _divorce(proposers[i], acceptors[i]);
         }
 
         assertEq(humanBond.activeMarriageCount(), 0);
