@@ -36,7 +36,7 @@ contract VowNFTTest is Test {
        --------------------------- */
 
     function test_mint_recordsMetadataAndMapping_slot0() public {
-        uint256 tid1 = vow.mintVowNFT(alice, alice, bob, 1_610_000_000, marriageId);
+        uint256 tid1 = vow.mintVowNft(alice, alice, bob, 1_610_000_000, marriageId);
         assertEq(tid1, 1);
 
         // mapping => slot0 filled, slot1 zero
@@ -52,8 +52,8 @@ contract VowNFTTest is Test {
     }
 
     function test_secondMint_fillsSlot1() public {
-        uint256 t1 = vow.mintVowNFT(alice, alice, bob, 1, marriageId);
-        uint256 t2 = vow.mintVowNFT(bob, alice, bob, 1, marriageId);
+        uint256 t1 = vow.mintVowNft(alice, alice, bob, 1, marriageId);
+        uint256 t2 = vow.mintVowNft(bob, alice, bob, 1, marriageId);
 
         assertEq(t1, 1);
         assertEq(t2, 2);
@@ -64,25 +64,25 @@ contract VowNFTTest is Test {
     }
 
     // function test_thirdMint_reverts_with_max_two() public {
-    //     vow.mintVowNFT(alice, alice, bob, 1, marriageId);
-    //     vow.mintVowNFT(bob, alice, bob, 1, marriageId);
+    //     vow.mintVowNft(alice, alice, bob, 1, marriageId);
+    //     vow.mintVowNft(bob, alice, bob, 1, marriageId);
 
     //     // third mint for same marriageId should revert with "max is 2"
     //     vm.expectRevert(bytes("max is 2"));
-    //     vow.mintVowNFT(stranger, alice, bob, 1, marriageId);
+    //     vow.mintVowNft(stranger, alice, bob, 1, marriageId);
     // }
 
     function test_tokenURI_hasDataPrefixAndImageCID() public {
-        vow.mintVowNFT(alice, alice, bob, 1_610_000_000, marriageId);
+        vow.mintVowNft(alice, alice, bob, 1_610_000_000, marriageId);
         string memory uri = vow.tokenURI(1);
 
         assertTrue(_startsWith(uri, "data:application/json;base64,"), "must return data URI");
         // check the contract stores the expected imageCID (tokenURI is built from this)
-        assertEq(vow.imageCID(), "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai");
+        assertEq(vow.imageCid(), "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai");
     }
 
     function test_console_log_tokenURI_for_manual_inspection() public {
-        uint256 t1 = vow.mintVowNFT(alice, alice, bob, 1_610_000_000, marriageId);
+        uint256 t1 = vow.mintVowNft(alice, alice, bob, 1_610_000_000, marriageId);
         string memory uri = vow.tokenURI(t1);
 
         // prints during `forge test -vv` so you can copy/paste to a browser or base64 decoder
@@ -99,13 +99,13 @@ contract VowNFTTest is Test {
        --------------------------- */
 
     function test_setImageCID_onlyOwner() public {
-        vow.setImageCID("ipfs://12345"); // owner (this contract) can set
-        assertEq(vow.imageCID(), "ipfs://12345");
+        vow.setImageCid("ipfs://12345"); // owner (this contract) can set
+        assertEq(vow.imageCid(), "ipfs://12345");
 
         // non-owner cannot
         vm.prank(address(0x999));
         vm.expectRevert(); // Ownable reverts
-        vow.setImageCID("ipfs://54321");
+        vow.setImageCid("ipfs://54321");
     }
 
     function test_setHumanBondContract_onlyOwner() public {
@@ -119,12 +119,12 @@ contract VowNFTTest is Test {
         vow.setHumanBondContract(address(0x123));
     }
 
-    function test_mintVowNFT_reverts_ifNotAuthorizedHumanBond() public {
+    function test_mintVowNft_reverts_ifNotAuthorizedHumanBond() public {
         vow.setHumanBondContract(address(0x111));
 
         vm.prank(address(0x222));
         vm.expectRevert(VowNFT.VowNFT__UnauthorizedMinter.selector);
-        vow.mintVowNFT(alice, alice, bob, 1, marriageId);
+        vow.mintVowNft(alice, alice, bob, 1, marriageId);
     }
 
     /* ---------------------------
@@ -133,7 +133,7 @@ contract VowNFTTest is Test {
 
     function test_transfer_reverts_with_VowNFT__TransfersDisabled() public {
         // mint token id 1 to alice
-        vow.mintVowNFT(alice, alice, bob, 1, marriageId);
+        vow.mintVowNft(alice, alice, bob, 1, marriageId);
 
         // attempt to transfer from alice -> stranger, should revert with custom error
         vm.prank(alice);
@@ -142,7 +142,7 @@ contract VowNFTTest is Test {
     }
 
     function test_selfTransfer_allowed() public {
-        vow.mintVowNFT(alice, alice, bob, 1, marriageId);
+        vow.mintVowNft(alice, alice, bob, 1, marriageId);
 
         vm.prank(alice);
         vow.transferFrom(alice, alice, 1); // should NOT revert

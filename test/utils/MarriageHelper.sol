@@ -7,7 +7,7 @@ contract MarriageIdHelper is HumanBond {
     constructor() HumanBond(address(0), address(0), address(0), address(0), "", "", "", 0, 0, 0) {}
 
     /// @notice Expose internal function for testing
-    function exposed_getMarriageId(address a, address b) external pure returns (bytes32) {
+    function exposedGetMarriageId(address a, address b) external pure returns (bytes32) {
         return _getMarriageId(a, b);
     }
 }

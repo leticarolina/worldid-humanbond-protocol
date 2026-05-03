@@ -11,8 +11,8 @@ import {MockWorldID} from "./utils/MockWorldId.sol";
 import {DeployScript} from "../script/Deploy.s.sol";
 
 contract AutomationFlowTest is Test {
-    VowNFT vowNFT;
-    MilestoneNFT milestoneNFT;
+    VowNFT vowNft;
+    MilestoneNFT milestoneNft;
     TimeToken timeToken;
     MockWorldID worldId;
     HumanBond humanBond;
@@ -25,30 +25,30 @@ contract AutomationFlowTest is Test {
     uint256 constant ROOT = 1;
     uint256 constant NULLIFIER_PROPOSE = 1111;
     uint256 constant NULLIFIER_ACCEPT = 2222;
-    uint256[8] PROOF = [uint256(0), 0, 0, 0, 0, 0, 0, 0];
+    uint256[8] proof = [uint256(0), 0, 0, 0, 0, 0, 0, 0];
 
     function setUp() public {
         // Deploy mock WorldID
         worldId = new MockWorldID();
 
         // Deploy the other contracts
-        vowNFT = new VowNFT();
-        milestoneNFT = new MilestoneNFT();
+        vowNft = new VowNFT();
+        milestoneNft = new MilestoneNFT();
         timeToken = new TimeToken();
 
         // Setup milestone years (same as deploy script)
-        milestoneNFT.setMilestoneURI(1, "ipfs://dummy1");
-        milestoneNFT.setMilestoneURI(2, "ipfs://dummy2");
-        milestoneNFT.setMilestoneURI(3, "ipfs://dummy3");
-        milestoneNFT.setMilestoneURI(4, "ipfs://dummy4");
-        milestoneNFT.freezeMilestones();
+        milestoneNft.setMilestoneURI(1, "ipfs://dummy1");
+        milestoneNft.setMilestoneURI(2, "ipfs://dummy2");
+        milestoneNft.setMilestoneURI(3, "ipfs://dummy3");
+        milestoneNft.setMilestoneURI(4, "ipfs://dummy4");
+        milestoneNft.freezeMilestones();
 
         // Deploy HumanBond using the mock
         humanBond = new HumanBond(
             address(worldId),
-            address(vowNFT),
+            address(vowNft),
             address(timeToken),
-            address(milestoneNFT),
+            address(milestoneNft),
             "app_test",
             "propose-bond",
             "accept-bond",
@@ -58,31 +58,35 @@ contract AutomationFlowTest is Test {
         );
 
         // Wire up
-        milestoneNFT.setHumanBondContract(address(humanBond));
-        vowNFT.setHumanBondContract(address(humanBond));
+        milestoneNft.setHumanBondContract(address(humanBond));
+        vowNft.setHumanBondContract(address(humanBond));
         timeToken.setHumanBondContract(address(humanBond));
 
         // Give ETH
         vm.deal(leticia, 10 ether);
         vm.deal(bob, 10 ether);
+
+        // Push block.timestamp past DIVORCE_COOLDOWN so fresh users (lastDivorceTimestamp=0)
+        // don't hit HumanBond__CooldownActive. Foundry starts at timestamp=1 which is < cooldown.
+        vm.warp(humanBond.DIVORCE_COOLDOWN() + 1);
     }
 
     //============================ MODIFIERS ============================//
 
     modifier marriedCouple() {
         vm.startPrank(leticia);
-        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, PROOF);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
         vm.stopPrank();
 
         vm.startPrank(bob);
-        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, PROOF);
+        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
         vm.stopPrank();
         _;
     }
 
     modifier proposalSent() {
         vm.prank(leticia);
-        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, PROOF);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
         _;
     }
 
@@ -91,32 +95,43 @@ contract AutomationFlowTest is Test {
     //============================ PROPOSAL & ACCEPTANCE TESTS ============================//
     //=====================================================================================//
 
+    function test_propose_reverts_ifCooldownActive() public marriedCouple {
+        // Leticia divorces Bob to trigger cooldown
+        vm.prank(leticia);
+        humanBond.divorce(bob);
+
+        // Attempt to propose during cooldown
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__CooldownActive.selector);
+        humanBond.propose(address(0x03), ROOT, NULLIFIER_PROPOSE, proof);
+    }
+
     function test_propose_reverts_whenProposeToYourself() public {
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__CannotProposeToSelf.selector);
-        humanBond.propose(leticia, ROOT, NULLIFIER_PROPOSE, PROOF);
+        humanBond.propose(leticia, ROOT, NULLIFIER_PROPOSE, proof);
     }
 
     function test_propose_reverts_ifProposeToInvalidAddress() public {
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__InvalidAddress.selector);
-        humanBond.propose(address(0), ROOT, NULLIFIER_PROPOSE, PROOF);
+        humanBond.propose(address(0), ROOT, NULLIFIER_PROPOSE, proof);
     }
 
     function test_propose_reverts_ifAlreadyHasProposalOpen() public proposalSent {
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__ProposalAlreadyExists.selector);
-        humanBond.propose(address(0x01), NULLIFIER_PROPOSE + 1, 111, PROOF);
+        humanBond.propose(address(0x01), NULLIFIER_PROPOSE + 1, 111, proof);
     }
 
     function test_propose_reverts_ifAlreadyMarried() public marriedCouple {
         vm.startPrank(leticia);
         vm.expectRevert(HumanBond.HumanBond__UserAlreadyMarried.selector);
-        humanBond.propose(address(0x01), NULLIFIER_PROPOSE + 1, 111, PROOF);
+        humanBond.propose(address(0x01), NULLIFIER_PROPOSE + 1, 111, proof);
 
         vm.startPrank(bob);
         vm.expectRevert(HumanBond.HumanBond__UserAlreadyMarried.selector);
-        humanBond.propose(address(0x02), NULLIFIER_PROPOSE + 2, 111, PROOF);
+        humanBond.propose(address(0x02), NULLIFIER_PROPOSE + 2, 111, proof);
     }
 
     // function test_propose_reverts_ifUsingSameNullifier() public proposalSent {
@@ -126,17 +141,23 @@ contract AutomationFlowTest is Test {
     //     assertEq(usedNullfier, true);
 
     //     vm.expectRevert(HumanBond.HumanBond__InvalidNullifier.selector);
-    //     humanBond.propose(address(0x01), ROOT, NULLIFIER_PROPOSE, PROOF);
+    //     humanBond.propose(address(0x01), ROOT, NULLIFIER_PROPOSE, proof);
     // }
 
     function test_propose_works_afterDivorce() public marriedCouple {
         vm.startPrank(leticia);
         humanBond.divorce(bob);
-        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, PROOF);
+        vm.stopPrank();
+
+        // Wait out the divorce cooldown before remarrying
+        skip(humanBond.DIVORCE_COOLDOWN() + 1);
+
+        vm.startPrank(leticia);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
         vm.stopPrank();
 
         vm.prank(bob);
-        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, PROOF);
+        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
     }
 
     function test_propose_sucessfully_storeProposal() public proposalSent {
@@ -155,7 +176,7 @@ contract AutomationFlowTest is Test {
         emit HumanBond.ProposalCreated(leticia, bob);
 
         vm.prank(leticia);
-        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, PROOF);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
     }
 
     //============================ ACCEPTANCE TESTS =======================================//
@@ -163,25 +184,40 @@ contract AutomationFlowTest is Test {
 
     function test_accept_reverts_ifNotCorrectPartnerAccept() public proposalSent {
         vm.expectRevert(HumanBond.HumanBond__NotProposedToYou.selector);
-        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, PROOF);
+        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
+    }
+
+    function test_accept_reverts_ifCooldownActive() public marriedCouple {
+        // Leticia divorces Bob to trigger cooldown
+        vm.prank(leticia);
+        humanBond.divorce(bob);
+
+        // Attempt to accept during cooldown
+        vm.startPrank(address(0x04));
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE + 1, proof);
+        vm.stopPrank();
+
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__CooldownActive.selector);
+        humanBond.accept(address(0x04), ROOT, NULLIFIER_ACCEPT, proof);
     }
 
     // function test_accept_reverts_ifNullifierAlreadyUsed() public marriedCouple {
     //     // recreates a new proposal because accept() deletes it
     //     vm.prank(leticia);
-    //     humanBond.propose(bob, ROOT, 1002, PROOF);
+    //     humanBond.propose(bob, ROOT, 1002, proof);
 
     //     // bob tries to accept using SAME nullifier 2001 → should revert
     //     vm.prank(bob);
     //     vm.expectRevert(HumanBond.HumanBond__InvalidNullifier.selector);
-    //     humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, PROOF);
+    //     humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
     // }
 
     function test_accept_getMarriageId_recordsMarriageIdSymmetryAndPushToArray() public marriedCouple {
         MarriageIdHelper helper = new MarriageIdHelper();
 
-        bytes32 id1 = helper.exposed_getMarriageId(leticia, bob);
-        bytes32 id2 = helper.exposed_getMarriageId(bob, leticia);
+        bytes32 id1 = helper.exposedGetMarriageId(leticia, bob);
+        bytes32 id2 = helper.exposedGetMarriageId(bob, leticia);
         bytes32 recordedMarriage = humanBond.marriageIds(0);
 
         assertEq(id1, id2, "Marriage IDs should be symmetric");
@@ -196,8 +232,8 @@ contract AutomationFlowTest is Test {
 
     function test_accept_deletes_allPreviousProposals() public proposalSent {
         vm.startPrank(bob);
-        humanBond.propose(address(0x01), ROOT, NULLIFIER_PROPOSE + 1, PROOF);
-        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, PROOF);
+        humanBond.propose(address(0x01), ROOT, NULLIFIER_PROPOSE + 1, proof);
+        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
         vm.stopPrank();
         HumanBond.Proposal memory bobsProposal = humanBond.getProposal(bob);
         assertEq(bobsProposal.proposer, address(0));
@@ -206,10 +242,10 @@ contract AutomationFlowTest is Test {
 
     function test_accept_clearsIncomingProposalCorrectly() public {
         vm.prank(leticia);
-        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, PROOF);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
 
         vm.prank(bob);
-        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, PROOF);
+        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
 
         HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
         assertEq(incoming.length, 0);
@@ -219,8 +255,8 @@ contract AutomationFlowTest is Test {
     }
 
     function test_accpet_MintsVowNFTandSendTokens() public marriedCouple {
-        assertEq(vowNFT.ownerOf(1), leticia);
-        assertEq(vowNFT.ownerOf(2), bob);
+        assertEq(vowNft.ownerOf(1), leticia);
+        assertEq(vowNft.ownerOf(2), bob);
         assertEq(timeToken.balanceOf(leticia), 1 ether);
         assertEq(timeToken.balanceOf(bob), 1 ether);
     }
@@ -239,7 +275,7 @@ contract AutomationFlowTest is Test {
 
     function test_pendingYield_recordsBalanceCorrectly() public marriedCouple {
         // warp minutes (100 TIME)
-        skip(block.timestamp + 100 minutes);
+        skip(100 minutes);
         uint256 expectedBalance = humanBond.getPendingYield(leticia, bob);
         assertEq(expectedBalance, 100 ether);
     }
@@ -257,7 +293,7 @@ contract AutomationFlowTest is Test {
     }
 
     function test_claimYield_splitsTokensEvenlyAndResetsCounter() public marriedCouple {
-        skip(block.timestamp + 10 minutes);
+        skip(10 minutes);
 
         vm.prank(leticia);
         humanBond.claimYield(bob);
@@ -288,7 +324,7 @@ contract AutomationFlowTest is Test {
     }
 
     function test_manualCheckAndMint_reverts_ifYearExceedsMax() public marriedCouple {
-        uint256 max = milestoneNFT.latestYear();
+        uint256 max = milestoneNft.latestYear();
 
         // warp to year = 5
         skip((max + 1));
@@ -306,8 +342,8 @@ contract AutomationFlowTest is Test {
         humanBond.manualCheckAndMint(bob);
 
         // tokenId 0 and 1 minted (soulbound)
-        assertEq(milestoneNFT.ownerOf(1), leticia);
-        assertEq(milestoneNFT.ownerOf(2), bob);
+        assertEq(milestoneNft.ownerOf(1), leticia);
+        assertEq(milestoneNft.ownerOf(2), bob);
 
         uint256 currentYear = humanBond.getCurrentMilestoneYear(leticia, bob);
         assertEq(currentYear, 1);
@@ -334,14 +370,14 @@ contract AutomationFlowTest is Test {
         humanBond.manualCheckAndMint(bob);
 
         // EXPECT minted years 1, 2, 3 for both
-        assertEq(milestoneNFT.ownerOf(1), leticia);
-        assertEq(milestoneNFT.ownerOf(2), bob);
+        assertEq(milestoneNft.ownerOf(1), leticia);
+        assertEq(milestoneNft.ownerOf(2), bob);
 
-        assertEq(milestoneNFT.ownerOf(3), leticia);
-        assertEq(milestoneNFT.ownerOf(4), bob);
+        assertEq(milestoneNft.ownerOf(3), leticia);
+        assertEq(milestoneNft.ownerOf(4), bob);
 
-        assertEq(milestoneNFT.ownerOf(5), leticia);
-        assertEq(milestoneNFT.ownerOf(6), bob);
+        assertEq(milestoneNft.ownerOf(5), leticia);
+        assertEq(milestoneNft.ownerOf(6), bob);
 
         // state updated to latest year
         uint256 currentYear = humanBond.getCurrentMilestoneYear(leticia, bob);
@@ -349,7 +385,7 @@ contract AutomationFlowTest is Test {
     }
 
     function test_manualCheckAndMint_capsToLatestYear() public marriedCouple {
-        uint256 max = milestoneNFT.latestYear(); // suppose = 4
+        uint256 max = milestoneNft.latestYear(); // suppose = 4
 
         // warp far beyond the max (simulate 10 years)
         skip(10 * 3 minutes + 1);
@@ -361,21 +397,21 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.getCurrentMilestoneYear(leticia, bob), max);
 
         // verify token existence
-        assertEq(milestoneNFT.ownerOf(1), leticia);
-        assertEq(milestoneNFT.ownerOf(2), bob);
+        assertEq(milestoneNft.ownerOf(1), leticia);
+        assertEq(milestoneNft.ownerOf(2), bob);
 
-        assertEq(milestoneNFT.ownerOf(3), leticia);
-        assertEq(milestoneNFT.ownerOf(4), bob);
+        assertEq(milestoneNft.ownerOf(3), leticia);
+        assertEq(milestoneNft.ownerOf(4), bob);
 
-        assertEq(milestoneNFT.ownerOf(5), leticia);
-        assertEq(milestoneNFT.ownerOf(6), bob);
+        assertEq(milestoneNft.ownerOf(5), leticia);
+        assertEq(milestoneNft.ownerOf(6), bob);
 
-        assertEq(milestoneNFT.ownerOf(7), leticia);
-        assertEq(milestoneNFT.ownerOf(8), bob);
+        assertEq(milestoneNft.ownerOf(7), leticia);
+        assertEq(milestoneNft.ownerOf(8), bob);
 
         // should NOT mint year 3 or beyond
         vm.expectRevert();
-        milestoneNFT.ownerOf(9);
+        milestoneNft.ownerOf(9);
     }
 
     function test_manualCheckAndMint_updatesStateCorrectly() public marriedCouple {
@@ -396,7 +432,7 @@ contract AutomationFlowTest is Test {
 
     function test_manualCheckAndMint_partialYears() public marriedCouple {
         // Only milestone up to 4 years exists
-        assertEq(milestoneNFT.latestYear(), 4);
+        assertEq(milestoneNft.latestYear(), 4);
 
         // skip 5 years
         skip(5 * 3 minutes + 1);
@@ -409,7 +445,7 @@ contract AutomationFlowTest is Test {
 
         // year 3 should NOT exist
         vm.expectRevert();
-        milestoneNFT.ownerOf(9);
+        milestoneNft.ownerOf(9);
     }
 
     function test_manualCheckAndMint_emitsEventsForAllYears() public marriedCouple {
@@ -496,7 +532,7 @@ contract AutomationFlowTest is Test {
     function test_addProposal_tracksIncomingCorrectly() public {
         // Leticia proposes to Bob
         vm.prank(leticia);
-        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, PROOF);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
 
         // Check via the getter
         HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
@@ -513,10 +549,10 @@ contract AutomationFlowTest is Test {
         address alice = makeAddr("alice");
 
         vm.prank(leticia);
-        humanBond.propose(bob, ROOT, 9001, PROOF);
+        humanBond.propose(bob, ROOT, 9001, proof);
 
         vm.prank(alice);
-        humanBond.propose(bob, ROOT, 9002, PROOF);
+        humanBond.propose(bob, ROOT, 9002, proof);
 
         HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
 
@@ -529,7 +565,7 @@ contract AutomationFlowTest is Test {
 
     function test_getIncomingProposals_returnsCorrectStructures() public {
         vm.prank(leticia);
-        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, PROOF);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
 
         HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
 
@@ -542,7 +578,7 @@ contract AutomationFlowTest is Test {
 
     function test_removeProposal_removesCorrectly_singleEntry() public {
         vm.prank(leticia);
-        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, PROOF);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
 
         vm.prank(leticia);
         humanBond.cancelProposal();
@@ -560,13 +596,13 @@ contract AutomationFlowTest is Test {
         address carol = makeAddr("carol");
 
         vm.prank(leticia);
-        humanBond.propose(bob, ROOT, 9001, PROOF);
+        humanBond.propose(bob, ROOT, 9001, proof);
 
         vm.prank(alice);
-        humanBond.propose(bob, ROOT, 9002, PROOF);
+        humanBond.propose(bob, ROOT, 9002, proof);
 
         vm.prank(carol);
-        humanBond.propose(bob, ROOT, 9003, PROOF);
+        humanBond.propose(bob, ROOT, 9003, proof);
 
         // Alice cancels (middle element)
         vm.prank(alice);
@@ -580,6 +616,80 @@ contract AutomationFlowTest is Test {
         for (uint256 i = 0; i < incoming.length; i++) {
             assert(incoming[i].proposer != alice);
         }
+    }
+
+    //============================ REJECT PROPOSAL TESTS ================================//
+    //===================================================================================//
+
+    function test_rejectProposal_reverts_ifNotProposedToYou() public proposalSent {
+        // Carol tries to reject a proposal not directed to her
+        address carol = makeAddr("carol");
+        vm.prank(carol);
+        vm.expectRevert(HumanBond.HumanBond__NotProposedToYou.selector);
+        humanBond.rejectProposal(leticia);
+    }
+
+    function test_rejectProposal_reverts_ifProposalDoesNotExist() public {
+        // Bob tries to reject a proposal from leticia that was never made
+        vm.prank(bob);
+        vm.expectRevert(HumanBond.HumanBond__NotProposedToYou.selector);
+        humanBond.rejectProposal(leticia);
+    }
+
+    function test_rejectProposal_clearsProposalStruct() public proposalSent {
+        vm.prank(bob);
+        humanBond.rejectProposal(leticia);
+
+        HumanBond.Proposal memory p = humanBond.getProposal(leticia);
+        assertEq(p.proposer, address(0));
+        assertEq(p.proposed, address(0));
+    }
+
+    function test_rejectProposal_removesFromIncomingProposals() public proposalSent {
+        vm.prank(bob);
+        humanBond.rejectProposal(leticia);
+
+        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
+        assertEq(incoming.length, 0);
+    }
+
+    function test_rejectProposal_emits_ProposalCancelled() public proposalSent {
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.ProposalCancelled(leticia, bob);
+
+        vm.prank(bob);
+        humanBond.rejectProposal(leticia);
+    }
+
+    function test_rejectProposal_allowsProposerToReproposeAfterRejection() public proposalSent {
+        vm.prank(bob);
+        humanBond.rejectProposal(leticia);
+
+        // Leticia should be able to propose again (no ProposalAlreadyExists revert)
+        vm.prank(leticia);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
+
+        HumanBond.Proposal memory p = humanBond.getProposal(leticia);
+        assertEq(p.proposer, leticia);
+        assertEq(p.proposed, bob);
+    }
+
+    function test_rejectProposal_removesCorrectProposal_fromMultipleIncoming() public {
+        address alice = makeAddr("alice");
+
+        vm.prank(leticia);
+        humanBond.propose(bob, ROOT, 9001, proof);
+
+        vm.prank(alice);
+        humanBond.propose(bob, ROOT, 9002, proof);
+
+        // Bob rejects only leticia's proposal
+        vm.prank(bob);
+        humanBond.rejectProposal(leticia);
+
+        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
+        assertEq(incoming.length, 1);
+        assertEq(incoming[0].proposer, alice);
     }
 
     //================================ GETTERS TESTS ==================================//
@@ -623,7 +733,7 @@ contract AutomationFlowTest is Test {
 
     function test_getProposal_returnsCorrectData() public {
         vm.prank(leticia);
-        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, PROOF);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
 
         HumanBond.Proposal memory p = humanBond.getProposal(leticia);
 
@@ -650,6 +760,100 @@ contract AutomationFlowTest is Test {
         assertEq(d.isMarried, true);
         assertEq(d.partner, bob);
         assertEq(d.pendingYield, 5 ether);
+    }
+
+    //============================== PROTOCOL COUNTERS ==================================//
+    //===================================================================================//
+
+    function test_activeMarriageCount_incrementsOnAccept() public marriedCouple {
+        assertEq(humanBond.activeMarriageCount(), 1);
+    }
+
+    function test_activeMarriageCount_decrementsOnDivorce() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.divorce(bob);
+
+        assertEq(humanBond.activeMarriageCount(), 0);
+    }
+
+    function test_activeMarriageCount_multipleCouplces() public {
+        address alice = makeAddr("alice");
+        address carol = makeAddr("carol");
+
+        // Couple 1: leticia + bob
+        vm.prank(leticia);
+        humanBond.propose(bob, ROOT, 1001, proof);
+        vm.prank(bob);
+        humanBond.accept(leticia, ROOT, 1002, proof);
+
+        // Couple 2: alice + carol
+        vm.prank(alice);
+        humanBond.propose(carol, ROOT, 2001, proof);
+        vm.prank(carol);
+        humanBond.accept(alice, ROOT, 2002, proof);
+
+        assertEq(humanBond.activeMarriageCount(), 2);
+
+        // One divorce → count drops to 1
+        vm.prank(alice);
+        humanBond.divorce(carol);
+
+        assertEq(humanBond.activeMarriageCount(), 1);
+    }
+
+    function test_totalDivorceCount_incrementsOnDivorce() public marriedCouple {
+        assertEq(humanBond.totalDivorceCount(), 0);
+
+        vm.prank(leticia);
+        humanBond.divorce(bob);
+
+        assertEq(humanBond.totalDivorceCount(), 1);
+    }
+
+    function test_totalDivorceCount_doesNotDecrementOnRemarry() public marriedCouple {
+        vm.prank(leticia);
+        humanBond.divorce(bob);
+
+        // Wait out cooldown and remarry
+        skip(humanBond.DIVORCE_COOLDOWN() + 1);
+
+        vm.prank(leticia);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
+        vm.prank(bob);
+        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
+
+        // Divorce count stays at 1; marriage count is back to 1
+        assertEq(humanBond.totalDivorceCount(), 1);
+        assertEq(humanBond.activeMarriageCount(), 1);
+    }
+
+    function test_counters_accumulateAcrossMultipleDivorces() public {
+        address alice = makeAddr("alice");
+        address carol = makeAddr("carol");
+
+        address[3] memory proposers = [leticia, alice, carol];
+        address[3] memory acceptors = [bob, makeAddr("dave"), makeAddr("eve")];
+        uint256 nullBase = 3000;
+
+        // Marry 3 couples
+        for (uint256 i = 0; i < 3; i++) {
+            vm.prank(proposers[i]);
+            humanBond.propose(acceptors[i], ROOT, nullBase + i * 2, proof);
+            vm.prank(acceptors[i]);
+            humanBond.accept(proposers[i], ROOT, nullBase + i * 2 + 1, proof);
+        }
+
+        assertEq(humanBond.activeMarriageCount(), 3);
+        assertEq(humanBond.totalDivorceCount(), 0);
+
+        // Divorce all 3
+        for (uint256 i = 0; i < 3; i++) {
+            vm.prank(proposers[i]);
+            humanBond.divorce(acceptors[i]);
+        }
+
+        assertEq(humanBond.activeMarriageCount(), 0);
+        assertEq(humanBond.totalDivorceCount(), 3);
     }
 
     //====================================TIME TOKEN ====================================//

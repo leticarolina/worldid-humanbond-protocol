@@ -53,7 +53,7 @@ contract DeployTest is Test {
         assertEq(vow.humanBondContract(), address(hb));
         assertEq(mile.humanBondContract(), address(hb));
 
-        assertTrue(bytes(mile.milestoneURIs(1)).length > 0);
+        assertTrue(bytes(mile.milestoneUrIs(1)).length > 0);
 
         console.log("Deployment logic works exactly as expected!");
     }

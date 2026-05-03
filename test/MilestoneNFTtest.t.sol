@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "forge-std/Test.sol";
-import "../src/MilestoneNFT.sol";
+import {Test} from "forge-std/Test.sol";
+import {MilestoneNFT} from "../src/MilestoneNFT.sol";
 
 contract MilestoneNFTTest is Test {
     MilestoneNFT milestone;
@@ -21,7 +21,7 @@ contract MilestoneNFTTest is Test {
 
     function test_SetMilestoneURI_onlyOwnerCanSet() public {
         milestone.setMilestoneURI(1, "ipfs://CID1");
-        assertEq(milestone.milestoneURIs(1), "ipfs://CID1");
+        assertEq(milestone.milestoneUrIs(1), "ipfs://CID1");
     }
 
     function test_revert_setMilestoneURI_nonOwner() public {

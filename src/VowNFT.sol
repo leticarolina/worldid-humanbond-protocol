@@ -18,7 +18,7 @@ contract VowNFT is ERC721, Ownable {
     error VowNFT__UnauthorizedMinter();
     error VowNFT__TransfersDisabled();
     uint256 public totalSupply;
-    string public imageCID = "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai"; //placeholder image CID
+    string public imageCid = "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai"; //placeholder image CID
 
     address public humanBondContract; //authorized minter address
     mapping(uint256 => TokenMetadata) public tokenMetadata;
@@ -54,13 +54,13 @@ contract VowNFT is ERC721, Ownable {
     }
 
     /// @notice Set the image CID for all NFTs
-    function setImageCID(string calldata newCid) external onlyOwner {
-        imageCID = newCid;
+    function setImageCid(string calldata newCid) external onlyOwner {
+        imageCid = newCid;
     }
 
     /// @notice Mint a Bond NFT to a given address.
     //only HumanBond contract can mint
-    function mintVowNFT(address to, address _partnerA, address _partnerB, uint256 _bondStart, bytes32 _marriageId)
+    function mintVowNft(address to, address _partnerA, address _partnerB, uint256 _bondStart, bytes32 _marriageId)
         external
         onlyHumanBond
         returns (uint256)
@@ -115,7 +115,7 @@ contract VowNFT is ERC721, Ownable {
                 id.toString(),
                 '","description":"Human verified bond recorded on-chain. Each token represents a unique commitment between two verified humans.",',
                 '"image":"',
-                imageCID,
+                imageCid,
                 '",',
                 '"attributes":',
                 attrs,

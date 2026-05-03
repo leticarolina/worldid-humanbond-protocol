@@ -23,7 +23,7 @@ contract MilestoneNFT is ERC721, Ownable {
 
     uint256 public totalSupply; // Also Counter for minted NFTs
     address public humanBondContract; // Authorized minter
-    mapping(uint256 => string) public milestoneURIs; // year => IPFS URI of the
+    mapping(uint256 => string) public milestoneUrIs; // year => IPFS URI of the
     mapping(uint256 tokenId => uint256 year) public tokenYear; // tokenId => milestone year
     uint256 public latestYear; // Highest milestone year set
     bool public frozen; // Prevents further edits once locked
@@ -81,7 +81,7 @@ contract MilestoneNFT is ERC721, Ownable {
     /// @dev Example: setMilestoneURI(1, "ipfs://QmCID1");
     function setMilestoneURI(uint256 year, string calldata uri) external onlyOwner notFrozen {
         if (year == 0) revert MilestoneNFT__URI_NotFound(year);
-        milestoneURIs[year] = uri;
+        milestoneUrIs[year] = uri;
         if (year > latestYear) latestYear = year;
         emit MilestoneURISet(year, uri);
     }
@@ -99,7 +99,7 @@ contract MilestoneNFT is ERC721, Ownable {
     /// @notice Mint the NFT corresponding to a specific milestone year.
     /// @dev Can only be called by the HumanBond contract.
     function mintMilestone(address to, uint256 year) external onlyHumanBond returns (uint256) {
-        string memory uri = milestoneURIs[year];
+        string memory uri = milestoneUrIs[year];
         if (bytes(uri).length == 0) revert MilestoneNFT__URI_NotFound(year);
 
         totalSupply++;
@@ -122,10 +122,10 @@ contract MilestoneNFT is ERC721, Ownable {
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         _requireOwned(tokenId);
         uint256 year = tokenYear[tokenId];
-        if (bytes(milestoneURIs[year]).length == 0) {
+        if (bytes(milestoneUrIs[year]).length == 0) {
             revert MilestoneNFT__URI_NotFound(year);
         }
-        return milestoneURIs[year];
+        return milestoneUrIs[year];
     }
 
     /* -------------------------------------------------------------------------- */
