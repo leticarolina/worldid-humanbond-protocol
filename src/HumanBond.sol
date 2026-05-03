@@ -25,7 +25,6 @@ contract HumanBond is Ownable {
     error HumanBond__NoActiveMarriage();
     error HumanBond__CannotProposeToSelf();
     error HumanBond__NotProposedToYou();
-    error HumanBond__AlreadyAccepted();
     error HumanBond__NothingToClaim();
     error HumanBond__CooldownActive();
     error HumanBond__DivorceAlreadyRequested();
@@ -526,6 +525,11 @@ contract HumanBond is Ownable {
         return marriages[_getMarriageId(a, b)].bondStart;
     }
 
+    /// @dev Get the divorce request details for a couple, if any
+    function getDivorceRequest(address a, address b) external view returns (DivorceRequest memory) {
+        return divorceRequests[_getMarriageId(a, b)];
+    }
+
     /// @dev Get a read-only view struct for a couple's marriage details
     function getMarriageView(address a, address b) external view returns (MarriageView memory v) {
         bytes32 id = _getMarriageId(a, b);
@@ -564,5 +568,7 @@ contract HumanBond is Ownable {
         d.isMarried = m.active;
         d.partner = (m.partnerA == user) ? m.partnerB : m.partnerA;
         d.pendingYield = _pendingYield(marriageId);
+        d.timeBalance = TIME_TOKEN.balanceOf(user);
+        d.hasProposal = proposals[user].proposer != address(0);
     }
 }
