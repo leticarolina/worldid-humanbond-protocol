@@ -400,18 +400,24 @@ contract HumanBond is Ownable {
         if (startYear > endYear) revert HumanBond__NothingToClaim();
 
         // Mint all missing years
+        _mintYearRange(a, b, id, startYear, endYear, bondStart);
+
+        m.lastMilestoneYear = endYear;
+    }
+
+    function _mintYearRange(address a, address b, bytes32 id, uint256 startYear, uint256 endYear, uint256 bondStart)
+        internal
+    {
         for (uint256 y = startYear; y <= endYear;) {
-            MILESTONE_NFT.mintMilestone(a, y);
-            MILESTONE_NFT.mintMilestone(b, y);
+            MILESTONE_NFT.mintMilestone(a, y, a, b, id, bondStart);
+            MILESTONE_NFT.mintMilestone(b, y, a, b, id, bondStart);
 
             emit AnniversaryAchieved(a, b, y, block.timestamp);
 
             unchecked {
-                y++; // gas saving
+                y++;
             }
         }
-
-        m.lastMilestoneYear = endYear;
     }
 
     /* --------------------------- PROPOSALS ------------------------------- */

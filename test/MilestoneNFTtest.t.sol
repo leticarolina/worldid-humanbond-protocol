@@ -51,7 +51,7 @@ contract MilestoneNFTTest is Test {
         milestone.setMilestoneURI(1, "ipfs://CID1");
 
         vm.prank(hb);
-        uint256 tokenId = milestone.mintMilestone(user, 1);
+        uint256 tokenId = milestone.mintMilestone(user, 1, user, address(0xA2), bytes32(0), 0);
 
         assertEq(tokenId, 1);
         assertEq(milestone.totalSupply(), 1);
@@ -63,27 +63,37 @@ contract MilestoneNFTTest is Test {
         milestone.setMilestoneURI(1, "ipfs://CID1");
 
         vm.expectRevert(MilestoneNFT.MilestoneNFT__NotAuthorized.selector);
-        milestone.mintMilestone(user, 1); //msg.sender is calling and not humanBond
+        milestone.mintMilestone(user, 1, user, address(0xA2), bytes32(0), 0); //msg.sender is calling and not humanBond
     }
 
     function test_revert_mintMilestone_missingURI() public {
         vm.prank(hb);
         vm.expectRevert(abi.encodeWithSelector(MilestoneNFT.MilestoneNFT__URI_NotFound.selector, 1));
-        milestone.mintMilestone(user, 1);
+        milestone.mintMilestone(user, 1, user, address(0xA2), bytes32(0), 0);
     }
 
     /* -------------------------------------------------------------- */
     /*                      tokenURI Tests                            */
     /* -------------------------------------------------------------- */
 
+    function _startsWith(string memory str, string memory prefix) internal pure returns (bool) {
+        bytes memory s = bytes(str);
+        bytes memory p = bytes(prefix);
+        if (s.length < p.length) return false;
+        for (uint256 i = 0; i < p.length; i++) {
+            if (s[i] != p[i]) return false;
+        }
+        return true;
+    }
+
     function test_tokenURI_returnsCorrectURI() public {
         milestone.setMilestoneURI(1, "ipfs://CID1");
 
         vm.prank(hb);
-        milestone.mintMilestone(user, 1);
+        milestone.mintMilestone(user, 1, user, address(0xA2), bytes32(0), 0);
 
         string memory uri = milestone.tokenURI(1);
-        assertEq(uri, "ipfs://CID1");
+        assertTrue(_startsWith(uri, "data:application/json;base64,"));
     }
 
     function test_revert_tokenURI_notMinted() public {
@@ -98,7 +108,7 @@ contract MilestoneNFTTest is Test {
     function test_revert_transfer_soulbound() public {
         milestone.setMilestoneURI(1, "ipfs://CID1");
         vm.prank(hb);
-        milestone.mintMilestone(user, 1);
+        milestone.mintMilestone(user, 1, user, address(0xA2), bytes32(0), 0);
 
         vm.prank(user);
         vm.expectRevert(MilestoneNFT.MilestoneNFT__TransfersDisabled.selector);
