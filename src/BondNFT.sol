@@ -10,14 +10,16 @@ import {Base64} from "openzeppelin-contracts/contracts/utils/Base64.sol";
  * @title BondNFT
  * @author Leticia Azevedo (@letiweb3)
  * @dev ERC-721 token representing a verified human bond.
- *      Each NFT stores metadata about the two partners and a unique marriage ID.
+ *      Each NFT stores metadata about the two partners and a unique Bond ID.
  */
 contract BondNFT is ERC721, Ownable {
     using Strings for uint256;
 
     error BondNFT__UnauthorizedMinter();
     error BondNFT__TransfersDisabled();
+    error BondNFT__InvalidAddress();
     uint256 public totalSupply;
+
     string public imageCid = "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai"; //placeholder image CID
 
     address public humanBondContract; //authorized minter address
@@ -25,6 +27,8 @@ contract BondNFT is ERC721, Ownable {
     mapping(bytes32 => uint256[2]) public marriageToToken; // marriageId -> two tokenIds (0 if not set)
 
     event BondMinted(bytes32 indexed marriageId, uint256 indexed tokenId, address indexed to);
+    event HumanBondContractSet(address indexed contractAddress);
+    event ImageCidSet(string newCid);
 
     struct TokenMetadata {
         address partnerA;
@@ -44,18 +48,19 @@ contract BondNFT is ERC721, Ownable {
         }
     }
 
-    constructor() ERC721("Human Bond", "VOW") Ownable(msg.sender) {
-        totalSupply = 0;
-    }
+    constructor() ERC721("Human Bond NFT", "HB") Ownable(msg.sender) {}
 
     /// @notice Set the HumanBond contract address
     function setHumanBondContract(address contractAddress) external onlyOwner {
+        if (contractAddress == address(0)) revert BondNFT__InvalidAddress();
         humanBondContract = contractAddress;
+        emit HumanBondContractSet(contractAddress);
     }
 
     /// @notice Set the image CID for all NFTs
     function setImageCid(string calldata newCid) external onlyOwner {
         imageCid = newCid;
+        emit ImageCidSet(newCid);
     }
 
     /// @notice Mint a Bond NFT to a given address.
@@ -66,21 +71,22 @@ contract BondNFT is ERC721, Ownable {
         returns (uint256)
     {
         totalSupply++;
+        uint256 tokenId = totalSupply;
 
-        tokenMetadata[totalSupply] =
+        tokenMetadata[tokenId] =
             TokenMetadata({partnerA: _partnerA, partnerB: _partnerB, bondStart: _bondStart, marriageId: _marriageId});
 
-        _safeMint(to, totalSupply);
-
         if (marriageToToken[_marriageId][0] == 0) {
-            marriageToToken[_marriageId][0] = totalSupply;
+            marriageToToken[_marriageId][0] = tokenId;
         } else {
-            marriageToToken[_marriageId][1] = totalSupply;
+            marriageToToken[_marriageId][1] = tokenId;
         }
 
-        emit BondMinted(_marriageId, totalSupply, to);
+        _safeMint(to, tokenId);
 
-        return totalSupply;
+        emit BondMinted(_marriageId, tokenId, to);
+
+        return tokenId;
     }
 
     /// @notice Returns the static IPFS metadata URI for all tokens.
@@ -128,19 +134,20 @@ contract BondNFT is ERC721, Ownable {
     }
 
     /* -------------------------------------------------------------------------- */
-    /*                             SOULBOUND OVERRIDES                             */
+    /*                             SOULBOUND OVERRIDES                            */
     /* -------------------------------------------------------------------------- */
-    /// @dev Override _update to disable transfers after minting. Tokens can only be minted to an address, not transferred.
+    /// @dev Fully soulbound — tokens can only be minted. Transfers and burns are permanently disabled.
     function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
         address from = _ownerOf(tokenId);
 
-        if (from != address(0) && to != from) {
-            revert BondNFT__TransfersDisabled();
-        }
+        if (from != address(0)) revert BondNFT__TransfersDisabled();
 
         return super._update(to, tokenId, auth);
     }
 
+    /* -------------------------------------------------------------------------- */
+    /*                                  GETTERS                                   */
+    /* -------------------------------------------------------------------------- */
     /// @notice Getter for token metadata
     function getTokenMetadata(uint256 id)
         external

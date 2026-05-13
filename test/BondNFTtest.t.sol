@@ -63,15 +63,6 @@ contract BondNFTTest is Test {
         assertEq(tokens[1], 2);
     }
 
-    // function test_thirdMint_reverts_with_max_two() public {
-    //     bond.mintBondNft(alice, alice, bob, 1, marriageId);
-    //     bond.mintBondNft(bob, alice, bob, 1, marriageId);
-
-    //     // third mint for same marriageId should revert with "max is 2"
-    //     vm.expectRevert(bytes("max is 2"));
-    //     bond.mintBondNft(stranger, alice, bob, 1, marriageId);
-    // }
-
     function test_tokenURI_hasDataPrefixAndImageCID() public {
         bond.mintBondNft(alice, alice, bob, 1_610_000_000, marriageId);
         string memory uri = bond.tokenURI(1);
@@ -141,10 +132,11 @@ contract BondNFTTest is Test {
         bond.transferFrom(alice, stranger, 1);
     }
 
-    function test_selfTransfer_allowed() public {
+    function test_selfTransfer_reverts_soulbound() public {
         bond.mintBondNft(alice, alice, bob, 1, marriageId);
 
         vm.prank(alice);
-        bond.transferFrom(alice, alice, 1); // should NOT revert
+        vm.expectRevert(BondNFT.BondNFT__TransfersDisabled.selector);
+        bond.transferFrom(alice, alice, 1);
     }
 }

@@ -11,7 +11,7 @@ import {MockWorldID} from "./utils/MockWorldId.sol";
 import {DeployScript} from "../script/Deploy.s.sol";
 
 contract AutomationFlowTest is Test {
-    BondNFT BondNft;
+    BondNFT bondNft;
     MilestoneNFT milestoneNft;
     TimeToken timeToken;
     MockWorldID worldId;
@@ -32,7 +32,7 @@ contract AutomationFlowTest is Test {
         worldId = new MockWorldID();
 
         // Deploy the other contracts
-        BondNft = new BondNFT();
+        bondNft = new BondNFT();
         milestoneNft = new MilestoneNFT();
         timeToken = new TimeToken();
 
@@ -46,7 +46,7 @@ contract AutomationFlowTest is Test {
         // Deploy HumanBond using the mock
         humanBond = new HumanBond(
             address(worldId),
-            address(BondNft),
+            address(bondNft),
             address(timeToken),
             address(milestoneNft),
             "app_test",
@@ -59,7 +59,7 @@ contract AutomationFlowTest is Test {
 
         // Wire up
         milestoneNft.setHumanBondContract(address(humanBond));
-        BondNft.setHumanBondContract(address(humanBond));
+        bondNft.setHumanBondContract(address(humanBond));
         timeToken.setHumanBondContract(address(humanBond));
 
         // Make divorce timelock instant so tests don't accumulate extra yield
@@ -273,8 +273,8 @@ contract AutomationFlowTest is Test {
     }
 
     function test_accpet_MintsBondNFTandSendTokens() public marriedCouple {
-        assertEq(BondNft.ownerOf(1), leticia);
-        assertEq(BondNft.ownerOf(2), bob);
+        assertEq(bondNft.ownerOf(1), leticia);
+        assertEq(bondNft.ownerOf(2), bob);
         assertEq(timeToken.balanceOf(leticia), 1 ether);
         assertEq(timeToken.balanceOf(bob), 1 ether);
     }
