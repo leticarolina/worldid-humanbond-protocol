@@ -2,10 +2,10 @@
 pragma solidity ^0.8.20;
 
 import {Test, console} from "forge-std/Test.sol";
-import {VowNFT} from "../src/VowNFT.sol";
+import {BondNFT} from "../src/BondNFT.sol";
 
-contract VowNFTTest is Test {
-    VowNFT public vow;
+contract BondNFTTest is Test {
+    BondNFT public bond;
     address public alice = address(0xA1);
     address public bob = address(0xB2);
     address public stranger = address(0xC3);
@@ -13,8 +13,8 @@ contract VowNFTTest is Test {
 
     function setUp() public {
         // deploy and set this test contract as the authorized minter (humanBondContract)
-        vow = new VowNFT();
-        vow.setHumanBondContract(address(this));
+        bond = new BondNFT();
+        bond.setHumanBondContract(address(this));
         marriageId = keccak256(abi.encodePacked("marriage-1"));
     }
 
@@ -36,15 +36,15 @@ contract VowNFTTest is Test {
        --------------------------- */
 
     function test_mint_recordsMetadataAndMapping_slot0() public {
-        uint256 tid1 = vow.mintVowNft(alice, alice, bob, 1_610_000_000, marriageId);
+        uint256 tid1 = bond.mintBondNft(alice, alice, bob, 1_610_000_000, marriageId);
         assertEq(tid1, 1);
 
         // mapping => slot0 filled, slot1 zero
-        uint256[2] memory tokens = vow.getTokensByMarriage(marriageId);
+        uint256[2] memory tokens = bond.getTokensByMarriage(marriageId);
         assertEq(tokens[0], 1);
         assertEq(tokens[1], 0);
 
-        (address pA, address pB, uint256 bondStart, bytes32 mid) = vow.getTokenMetadata(1);
+        (address pA, address pB, uint256 bondStart, bytes32 mid) = bond.getTokenMetadata(1);
         assertEq(pA, alice);
         assertEq(pB, bob);
         assertEq(bondStart, 1_610_000_000);
@@ -52,38 +52,38 @@ contract VowNFTTest is Test {
     }
 
     function test_secondMint_fillsSlot1() public {
-        uint256 t1 = vow.mintVowNft(alice, alice, bob, 1, marriageId);
-        uint256 t2 = vow.mintVowNft(bob, alice, bob, 1, marriageId);
+        uint256 t1 = bond.mintBondNft(alice, alice, bob, 1, marriageId);
+        uint256 t2 = bond.mintBondNft(bob, alice, bob, 1, marriageId);
 
         assertEq(t1, 1);
         assertEq(t2, 2);
 
-        uint256[2] memory tokens = vow.getTokensByMarriage(marriageId);
+        uint256[2] memory tokens = bond.getTokensByMarriage(marriageId);
         assertEq(tokens[0], 1);
         assertEq(tokens[1], 2);
     }
 
     // function test_thirdMint_reverts_with_max_two() public {
-    //     vow.mintVowNft(alice, alice, bob, 1, marriageId);
-    //     vow.mintVowNft(bob, alice, bob, 1, marriageId);
+    //     bond.mintBondNft(alice, alice, bob, 1, marriageId);
+    //     bond.mintBondNft(bob, alice, bob, 1, marriageId);
 
     //     // third mint for same marriageId should revert with "max is 2"
     //     vm.expectRevert(bytes("max is 2"));
-    //     vow.mintVowNft(stranger, alice, bob, 1, marriageId);
+    //     bond.mintBondNft(stranger, alice, bob, 1, marriageId);
     // }
 
     function test_tokenURI_hasDataPrefixAndImageCID() public {
-        vow.mintVowNft(alice, alice, bob, 1_610_000_000, marriageId);
-        string memory uri = vow.tokenURI(1);
+        bond.mintBondNft(alice, alice, bob, 1_610_000_000, marriageId);
+        string memory uri = bond.tokenURI(1);
 
         assertTrue(_startsWith(uri, "data:application/json;base64,"), "must return data URI");
         // check the contract stores the expected imageCID (tokenURI is built from this)
-        assertEq(vow.imageCid(), "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai");
+        assertEq(bond.imageCid(), "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai");
     }
 
     function test_console_log_tokenURI_for_manual_inspection() public {
-        uint256 t1 = vow.mintVowNft(alice, alice, bob, 1_610_000_000, marriageId);
-        string memory uri = vow.tokenURI(t1);
+        uint256 t1 = bond.mintBondNft(alice, alice, bob, 1_610_000_000, marriageId);
+        string memory uri = bond.tokenURI(t1);
 
         // prints during `forge test -vv` so you can copy/paste to a browser or base64 decoder
         console.log("tokenURI(1) =>");
@@ -99,52 +99,52 @@ contract VowNFTTest is Test {
        --------------------------- */
 
     function test_setImageCID_onlyOwner() public {
-        vow.setImageCid("ipfs://12345"); // owner (this contract) can set
-        assertEq(vow.imageCid(), "ipfs://12345");
+        bond.setImageCid("ipfs://12345"); // owner (this contract) can set
+        assertEq(bond.imageCid(), "ipfs://12345");
 
         // non-owner cannot
         vm.prank(address(0x999));
         vm.expectRevert(); // Ownable reverts
-        vow.setImageCid("ipfs://54321");
+        bond.setImageCid("ipfs://54321");
     }
 
     function test_setHumanBondContract_onlyOwner() public {
         // owner (this) can set
-        vow.setHumanBondContract(address(0x111));
+        bond.setHumanBondContract(address(0x111));
         // restore to this
-        vow.setHumanBondContract(address(this));
+        bond.setHumanBondContract(address(this));
 
         vm.prank(address(0x999)); // non-owner cannot
         vm.expectRevert();
-        vow.setHumanBondContract(address(0x123));
+        bond.setHumanBondContract(address(0x123));
     }
 
-    function test_mintVowNft_reverts_ifNotAuthorizedHumanBond() public {
-        vow.setHumanBondContract(address(0x111));
+    function test_mintBondNft_reverts_ifNotAuthorizedHumanBond() public {
+        bond.setHumanBondContract(address(0x111));
 
         vm.prank(address(0x222));
-        vm.expectRevert(VowNFT.VowNFT__UnauthorizedMinter.selector);
-        vow.mintVowNft(alice, alice, bob, 1, marriageId);
+        vm.expectRevert(BondNFT.BondNFT__UnauthorizedMinter.selector);
+        bond.mintBondNft(alice, alice, bob, 1, marriageId);
     }
 
     /* ---------------------------
        Soulbound / transfer prevention
        --------------------------- */
 
-    function test_transfer_reverts_with_VowNFT__TransfersDisabled() public {
+    function test_transfer_reverts_with_BondNFT__TransfersDisabled() public {
         // mint token id 1 to alice
-        vow.mintVowNft(alice, alice, bob, 1, marriageId);
+        bond.mintBondNft(alice, alice, bob, 1, marriageId);
 
         // attempt to transfer from alice -> stranger, should revert with custom error
         vm.prank(alice);
-        vm.expectRevert(VowNFT.VowNFT__TransfersDisabled.selector);
-        vow.transferFrom(alice, stranger, 1);
+        vm.expectRevert(BondNFT.BondNFT__TransfersDisabled.selector);
+        bond.transferFrom(alice, stranger, 1);
     }
 
     function test_selfTransfer_allowed() public {
-        vow.mintVowNft(alice, alice, bob, 1, marriageId);
+        bond.mintBondNft(alice, alice, bob, 1, marriageId);
 
         vm.prank(alice);
-        vow.transferFrom(alice, alice, 1); // should NOT revert
+        bond.transferFrom(alice, alice, 1); // should NOT revert
     }
 }

@@ -2,7 +2,7 @@
 pragma solidity ^0.8.20;
 
 import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
-import {VowNFT} from "./VowNFT.sol";
+import {BondNFT} from "./BondNFT.sol";
 import {TimeToken} from "./TimeToken.sol";
 import {MilestoneNFT} from "./MilestoneNFT.sol";
 import {ByteHasher} from "./helpers/ByteHasher.sol";
@@ -94,7 +94,7 @@ contract HumanBond is Ownable {
     bytes32[] public marriageIds; //So every couple has a unique “marriage fingerprint”
 
     IWorldID public immutable WORLD_ID;
-    VowNFT public immutable VOW_NFT;
+    BondNFT public immutable BOND_NFT;
     TimeToken public immutable TIME_TOKEN;
     MilestoneNFT public immutable MILESTONE_NFT;
     uint256 public immutable EXTERNAL_NULLIFIER_PROPOSE;
@@ -124,7 +124,7 @@ contract HumanBond is Ownable {
     /* --------------------------- CONSTRUCTOR -------------------------- */
     constructor(
         address _worldIdRouter,
-        address _vowNft,
+        address _bondNft,
         address _timeToken,
         address _milestoneNft,
         string memory _appId,
@@ -135,7 +135,7 @@ contract HumanBond is Ownable {
         uint256 _divorceCooldown
     ) Ownable(msg.sender) {
         WORLD_ID = IWorldID(_worldIdRouter);
-        VOW_NFT = VowNFT(_vowNft);
+        BOND_NFT = BondNFT(_bondNft);
         TIME_TOKEN = TimeToken(_timeToken);
         MILESTONE_NFT = MilestoneNFT(_milestoneNft);
 
@@ -252,8 +252,8 @@ contract HumanBond is Ownable {
         marriageIds.push(marriageId);
 
         // Mint identical NFTs for both partners
-        VOW_NFT.mintVowNft(proposer, proposer, msg.sender, block.timestamp, marriageId);
-        VOW_NFT.mintVowNft(msg.sender, proposer, msg.sender, block.timestamp, marriageId);
+        BOND_NFT.mintBondNft(proposer, proposer, msg.sender, block.timestamp, marriageId);
+        BOND_NFT.mintBondNft(msg.sender, proposer, msg.sender, block.timestamp, marriageId);
 
         // Reward both parties with 1 TOKEN immediately
         TIME_TOKEN.mint(proposer, 1 ether);

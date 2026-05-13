@@ -2,19 +2,19 @@
 pragma solidity ^0.8.20;
 
 import {Script, console} from "forge-std/Script.sol";
-import {VowNFT} from "../src/VowNFT.sol";
+import {BondNFT} from "../src/BondNFT.sol";
 import {HumanBond} from "../src/HumanBond.sol";
 import {MilestoneNFT} from "../src/MilestoneNFT.sol";
 import {TimeToken} from "../src/TimeToken.sol";
 
 /// @title Deploy Script for HumanBond Protocol
-/// @notice Deploys TimeToken, VowNFT, MilestoneNFT and HumanBond logic contract, sets up linkage, and prints addresses.
+/// @notice Deploys TimeToken, BondNFT, MilestoneNFT and HumanBond logic contract, sets up linkage, and prints addresses.
 contract DeployScript is Script {
     function run() external {
         vm.startBroadcast();
 
         // Deploy contract and tokens
-        VowNFT vowNft = new VowNFT();
+        BondNFT bondNft = new BondNFT();
         MilestoneNFT milestoneNft = new MilestoneNFT();
         TimeToken timeToken = new TimeToken();
         address worldIdRouterReal = 0x17B354dD2595411ff79041f930e491A4Df39A278; // World ID Router mainnet address
@@ -31,7 +31,7 @@ contract DeployScript is Script {
         //Deploy HumanBond main contract
         HumanBond humanBond = new HumanBond(
             worldIdRouterReal, // replace w/ chosen network WORLD ID ROUTER
-            address(vowNft),
+            address(bondNft),
             address(timeToken),
             address(milestoneNft),
             appId,
@@ -44,13 +44,13 @@ contract DeployScript is Script {
 
         //Link contracts
         milestoneNft.setHumanBondContract(address(humanBond)); //Link MilestoneNFT to HumanBond
-        vowNft.setHumanBondContract(address(humanBond));
+        bondNft.setHumanBondContract(address(humanBond));
         timeToken.setHumanBondContract(address(humanBond));
 
         vm.stopBroadcast();
 
         // Logs
-        console.log("VowNFT deployed at:", address(vowNft));
+        console.log("BondNFT deployed at:", address(bondNft));
         console.log("MilestoneNFT deployed at:", address(milestoneNft));
         console.log("HumanBond deployed at:", address(humanBond));
         console.log("Time Token deployed at:", address(timeToken));

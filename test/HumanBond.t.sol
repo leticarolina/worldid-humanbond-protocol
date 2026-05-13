@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {HumanBond} from "../src/HumanBond.sol";
-import {VowNFT} from "../src/VowNFT.sol";
+import {BondNFT} from "../src/BondNFT.sol";
 import {MilestoneNFT} from "../src/MilestoneNFT.sol";
 import {TimeToken} from "../src/TimeToken.sol";
 import {MarriageIdHelper} from "./utils/MarriageHelper.sol";
@@ -11,7 +11,7 @@ import {MockWorldID} from "./utils/MockWorldId.sol";
 import {DeployScript} from "../script/Deploy.s.sol";
 
 contract AutomationFlowTest is Test {
-    VowNFT vowNft;
+    BondNFT bondNft;
     MilestoneNFT milestoneNft;
     TimeToken timeToken;
     MockWorldID worldId;
@@ -32,7 +32,7 @@ contract AutomationFlowTest is Test {
         worldId = new MockWorldID();
 
         // Deploy the other contracts
-        vowNft = new VowNFT();
+        bondNft = new BondNFT();
         milestoneNft = new MilestoneNFT();
         timeToken = new TimeToken();
 
@@ -46,7 +46,7 @@ contract AutomationFlowTest is Test {
         // Deploy HumanBond using the mock
         humanBond = new HumanBond(
             address(worldId),
-            address(vowNft),
+            address(bondNft),
             address(timeToken),
             address(milestoneNft),
             "app_test",
@@ -59,7 +59,7 @@ contract AutomationFlowTest is Test {
 
         // Wire up
         milestoneNft.setHumanBondContract(address(humanBond));
-        vowNft.setHumanBondContract(address(humanBond));
+        bondNft.setHumanBondContract(address(humanBond));
         timeToken.setHumanBondContract(address(humanBond));
 
         // Give ETH
@@ -274,9 +274,9 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.isMarried(leticia, bob), true);
     }
 
-    function test_accpet_MintsVowNFTandSendTokens() public marriedCouple {
-        assertEq(vowNft.ownerOf(1), leticia);
-        assertEq(vowNft.ownerOf(2), bob);
+    function test_accpet_MintsBondNFTandSendTokens() public marriedCouple {
+        assertEq(bondNft.ownerOf(1), leticia);
+        assertEq(bondNft.ownerOf(2), bob);
         assertEq(timeToken.balanceOf(leticia), 1 ether);
         assertEq(timeToken.balanceOf(bob), 1 ether);
     }
