@@ -7,25 +7,30 @@ import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
 /**
  * @title TIME Token
  * @author Leticia Azevedo (@letiweb3)
- * @dev A basic ERC20 token used for rewarding married users.
+ * @notice ERC20 token representing time for World ID Verified Humans.
  */
 contract TimeToken is ERC20, ERC20Burnable, Ownable {
-    address public humanBondContract;
+    mapping(address => bool) public authorizedMinters;
 
     error NotAuthorized();
+    error InvalidAddress();
+
+    event MinterSet(address indexed minter, bool authorized);
 
     constructor() ERC20("TIME", "TIME") Ownable(msg.sender) {}
 
-    function setHumanBondContract(address _hb) external onlyOwner {
-        humanBondContract = _hb;
+    /// @notice Set or revoke minter authorization for an address.
+    function setMinter(address minter, bool authorized) external onlyOwner {
+        if (minter == address(0)) revert InvalidAddress();
+        authorizedMinters[minter] = authorized;
+        emit MinterSet(minter, authorized);
     }
 
-    /// @notice Mint new DAY tokens to a specified address.
+    /// @notice Mint new tokens to a specified address.
     function mint(address to, uint256 amount) external {
-        if (msg.sender != owner() && msg.sender != humanBondContract) {
+        if (msg.sender != owner() && !authorizedMinters[msg.sender]) {
             revert NotAuthorized();
         }
-
         _mint(to, amount);
     }
 }
