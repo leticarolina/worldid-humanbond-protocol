@@ -1,4 +1,4 @@
-# 💍 HumanBond Protocol — V3
+# HumanBond Protocol — V3
 
 On-chain bonds, yield, milestones & relationship-proof infrastructure.
 
