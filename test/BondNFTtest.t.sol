@@ -39,10 +39,9 @@ contract BondNFTTest is Test {
         uint256 tid1 = bond.mintBondNft(alice, alice, bob, 1_610_000_000, bondId);
         assertEq(tid1, 1);
 
-        // mapping => slot0 filled, slot1 zero
         uint256[] memory tokens = bond.getTokensByBond(bondId);
+        assertEq(tokens.length, 1);
         assertEq(tokens[0], 1);
-        assertEq(tokens[1], 0);
 
         (address pA, address pB, uint256 bondStart, bytes32 mid) = bond.getTokenMetadata(1);
         assertEq(pA, alice);
@@ -108,6 +107,11 @@ contract BondNFTTest is Test {
         vm.prank(address(0x999)); // non-owner cannot
         vm.expectRevert();
         bond.setHumanBondContract(address(0x123));
+    }
+
+    function test_setHumanBondContract_reverts_ifZeroAddress() public {
+        vm.expectRevert(BondNFT.BondNFT__InvalidAddress.selector);
+        bond.setHumanBondContract(address(0));
     }
 
     function test_mintBondNft_reverts_ifNotAuthorizedHumanBond() public {

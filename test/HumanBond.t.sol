@@ -102,7 +102,7 @@ contract AutomationFlowTest is Test {
 
     //test_<unitUnderTest>_<stateOrCondition>_<expectedOutcome/Behaviour>
 
-    //============================ PROPOSAL & ACCEPTANCE TESTS ============================//
+    //============================ PROPOSAL TESTS =========================================//
     //=====================================================================================//
 
     function test_propose_reverts_ifCooldownActive() public bondedCouple {
@@ -146,7 +146,7 @@ contract AutomationFlowTest is Test {
     function test_propose_works_afterDissolution() public bondedCouple {
         _dissolution(leticia, bob);
 
-        // Wait out the dissolution cooldown before remarrying
+        // Wait out the dissolution cooldown before rebonding
         skip(humanBond.REBOND_COOLDOWN() + 1);
 
         vm.startPrank(leticia);
@@ -196,6 +196,22 @@ contract AutomationFlowTest is Test {
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__CooldownActive.selector);
         humanBond.accept(address(0x04), ROOT, NULLIFIER_ACCEPT, proof);
+    }
+
+    function test_accept_reverts_ifAcceptorAlreadyBonded() public proposalSent {
+        // leticia already proposed to bob (proposalSent modifier)
+        // carol also proposes to bob and bob accepts first — bob is now bonded
+        address carol = makeAddr("carol");
+        vm.prank(carol);
+        humanBond.propose(bob, ROOT, 9001, proof);
+
+        vm.prank(bob);
+        humanBond.accept(carol, ROOT, 9002, proof);
+
+        // bob tries to accept leticia's still-pending proposal while already bonded
+        vm.prank(bob);
+        vm.expectRevert(HumanBond.HumanBond__UserAlreadyBonded.selector);
+        humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
     }
 
     function test_accept_getBondId_recordsBondIdSymmetryAndPushToArray() public bondedCouple {
@@ -536,7 +552,79 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.activeBondOf(bob), bytes32(0));
     }
 
-    //============================ PROPOSAL TESTS =======================================//
+    function test_requestDissolution_reverts_ifAlreadyRequested() public bondedCouple {
+        vm.prank(leticia);
+        humanBond.requestDissolution(bob);
+
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__DissolutionAlreadyRequested.selector);
+        humanBond.requestDissolution(bob);
+    }
+
+    function test_executeDissolution_reverts_ifNoActiveBond() public {
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__NoActiveBond.selector);
+        humanBond.executeDissolution(bob);
+    }
+
+    function test_executeDissolution_reverts_ifNoDissolutionRequest() public bondedCouple {
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__NoDissolutionRequest.selector);
+        humanBond.executeDissolution(bob);
+    }
+
+    function test_executeDissolution_reverts_ifNotRequester() public bondedCouple {
+        vm.prank(leticia);
+        humanBond.requestDissolution(bob);
+
+        vm.prank(bob);
+        vm.expectRevert(HumanBond.HumanBond__NotYourBond.selector);
+        humanBond.executeDissolution(leticia);
+    }
+
+    function test_executeDissolution_reverts_ifDelayNotMet() public bondedCouple {
+        humanBond.setDissolutionDelay(3 days);
+
+        vm.prank(leticia);
+        humanBond.requestDissolution(bob);
+
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__DissolutionDelayNotMet.selector);
+        humanBond.executeDissolution(bob);
+    }
+
+    function test_cancelDissolutionRequest_cancelsSuccessfully() public bondedCouple {
+        vm.prank(leticia);
+        humanBond.requestDissolution(bob);
+
+        HumanBond.DissolutionRequest memory req = humanBond.getDissolutionRequest(leticia, bob);
+        assertEq(req.active, true);
+        assertEq(req.requester, leticia);
+
+        vm.prank(leticia);
+        humanBond.cancelDissolutionRequest(bob);
+
+        HumanBond.DissolutionRequest memory reqAfter = humanBond.getDissolutionRequest(leticia, bob);
+        assertEq(reqAfter.active, false);
+        assertEq(humanBond.isBonded(leticia, bob), true);
+    }
+
+    function test_cancelDissolutionRequest_reverts_ifNoRequest() public bondedCouple {
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__NoDissolutionRequest.selector);
+        humanBond.cancelDissolutionRequest(bob);
+    }
+
+    function test_cancelDissolutionRequest_reverts_ifNotRequester() public bondedCouple {
+        vm.prank(leticia);
+        humanBond.requestDissolution(bob);
+
+        vm.prank(bob);
+        vm.expectRevert(HumanBond.HumanBond__NotYourBond.selector);
+        humanBond.cancelDissolutionRequest(leticia);
+    }
+
+    //============================ PROPOSAL MANAGEMENT TESTS ============================//
     //===================================================================================//
 
     function test_cancelProposal_reverts_ifNoProposal() public {
@@ -787,6 +875,34 @@ contract AutomationFlowTest is Test {
         assertEq(d.pendingYield, 5 ether);
     }
 
+    function test_getBondId_isSymmetric() public view {
+        bytes32 id1 = humanBond.getBondId(leticia, bob);
+        bytes32 id2 = humanBond.getBondId(bob, leticia);
+        assertEq(id1, id2);
+        assertTrue(id1 != bytes32(0));
+    }
+
+    function test_hasPendingProposal_returnsCorrectly() public {
+        assertEq(humanBond.hasPendingProposal(leticia), false);
+
+        vm.prank(leticia);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
+
+        assertEq(humanBond.hasPendingProposal(leticia), true);
+    }
+
+    function test_getDissolutionRequest_returnsCorrectData() public bondedCouple {
+        HumanBond.DissolutionRequest memory req = humanBond.getDissolutionRequest(leticia, bob);
+        assertEq(req.active, false);
+
+        vm.prank(leticia);
+        humanBond.requestDissolution(bob);
+
+        req = humanBond.getDissolutionRequest(leticia, bob);
+        assertEq(req.active, true);
+        assertEq(req.requester, leticia);
+    }
+
     //============================== PROTOCOL COUNTERS ==================================//
     //===================================================================================//
 
@@ -832,10 +948,10 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.totalDissolutionCount(), 1);
     }
 
-    function test_totalDissolutionCount_doesNotDecrementOnRemarry() public bondedCouple {
+    function test_totalDissolutionCount_doesNotDecrementOnRebond() public bondedCouple {
         _dissolution(leticia, bob);
 
-        // Wait out cooldown and remarry
+        // Wait out cooldown and rebond
         skip(humanBond.REBOND_COOLDOWN() + 1);
 
         vm.prank(leticia);
@@ -856,7 +972,7 @@ contract AutomationFlowTest is Test {
         address[3] memory acceptors = [bob, makeAddr("dave"), makeAddr("eve")];
         uint256 nullBase = 3000;
 
-        // Marry 3 couples
+        // bond 3 couples
         for (uint256 i = 0; i < 3; i++) {
             vm.prank(proposers[i]);
             humanBond.propose(acceptors[i], ROOT, nullBase + i * 2, proof);
@@ -889,5 +1005,10 @@ contract AutomationFlowTest is Test {
         vm.prank(address(0x999));
         vm.expectRevert(TimeToken.NotAuthorized.selector);
         timeToken.mint(bob, 1 ether); // unauthorized mint
+    }
+
+    function test_timetoken_setMinter_reverts_ifZeroAddress() public {
+        vm.expectRevert(TimeToken.InvalidAddress.selector);
+        timeToken.setMinter(address(0), true);
     }
 }
