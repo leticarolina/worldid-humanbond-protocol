@@ -166,13 +166,6 @@ UI-ready read-only functions available on HumanBond:
 | `getCurrentMilestoneYear(address a, address b)` | Returns the last milestone year claimed |
 | `getDissolutionRequest(address a, address b)` | Returns the active `DissolutionRequest` struct for a bond, if any |
 
-On BondNFT:
-
-| Function | Description |
-|---|---|
-| `getTokensByBond(bytes32 bondId)` | Returns all token IDs minted for a given bond ID (supports rebond history) |
-| `getTokenMetadata(uint256 tokenId)` | Returns `partnerA`, `partnerB`, `bondStart`, `bondId` for a token |
-
 ---
 
 ## Refactoring History
