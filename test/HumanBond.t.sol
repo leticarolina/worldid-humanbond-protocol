@@ -6,7 +6,7 @@ import {HumanBond} from "../src/HumanBond.sol";
 import {BondNFT} from "../src/BondNFT.sol";
 import {MilestoneNFT} from "../src/MilestoneNFT.sol";
 import {TimeToken} from "../src/TimeToken.sol";
-import {MarriageIdHelper} from "./utils/MarriageHelper.sol";
+import {BondIdHelper} from "./utils/BondHelper.sol";
 import {MockWorldID} from "./utils/MockWorldId.sol";
 import {DeployScript} from "../script/Deploy.s.sol";
 
@@ -60,23 +60,23 @@ contract AutomationFlowTest is Test {
         // Wire up
         milestoneNft.setHumanBondContract(address(humanBond));
         bondNft.setHumanBondContract(address(humanBond));
-        timeToken.setHumanBondContract(address(humanBond));
+        timeToken.setMinter(address(humanBond), true);
 
-        // Make divorce timelock instant so tests don't accumulate extra yield
-        humanBond.setDivorceDelay(0);
+        // Make dissolution timelock instant so tests don't accumulate extra yield
+        humanBond.setDissolutionDelay(0);
 
         // Give ETH
         vm.deal(leticia, 10 ether);
         vm.deal(bob, 10 ether);
 
-        // Push block.timestamp past REBOND_COOLDOWN so fresh users (lastDivorceTimestamp=0)
+        // Push block.timestamp past REBOND_COOLDOWN so fresh users (lastDissolutionTimestamp=0)
         // don't hit HumanBond__CooldownActive. Foundry starts at timestamp=1 which is < cooldown.
         vm.warp(humanBond.REBOND_COOLDOWN() + 1);
     }
 
     //============================ MODIFIERS ============================//
 
-    modifier marriedCouple() {
+    modifier bondedCouple() {
         vm.startPrank(leticia);
         humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
         vm.stopPrank();
@@ -93,11 +93,11 @@ contract AutomationFlowTest is Test {
         _;
     }
 
-    function _divorce(address requester, address partner) internal {
+    function _dissolution(address requester, address partner) internal {
         vm.prank(requester);
-        humanBond.requestDivorce(partner);
+        humanBond.requestDissolution(partner);
         vm.prank(requester);
-        humanBond.executeDivorce(partner);
+        humanBond.executeDissolution(partner);
     }
 
     //test_<unitUnderTest>_<stateOrCondition>_<expectedOutcome/Behaviour>
@@ -105,9 +105,9 @@ contract AutomationFlowTest is Test {
     //============================ PROPOSAL & ACCEPTANCE TESTS ============================//
     //=====================================================================================//
 
-    function test_propose_reverts_ifCooldownActive() public marriedCouple {
-        // Leticia divorces Bob to trigger cooldown
-        _divorce(leticia, bob);
+    function test_propose_reverts_ifCooldownActive() public bondedCouple {
+        // Leticia dissolutions Bob to trigger cooldown
+        _dissolution(leticia, bob);
 
         // Attempt to propose during cooldown
         vm.prank(leticia);
@@ -133,20 +133,20 @@ contract AutomationFlowTest is Test {
         humanBond.propose(address(0x01), NULLIFIER_PROPOSE + 1, 111, proof);
     }
 
-    function test_propose_reverts_ifAlreadyMarried() public marriedCouple {
+    function test_propose_reverts_ifAlreadyBonded() public bondedCouple {
         vm.startPrank(leticia);
-        vm.expectRevert(HumanBond.HumanBond__UserAlreadyMarried.selector);
+        vm.expectRevert(HumanBond.HumanBond__UserAlreadyBonded.selector);
         humanBond.propose(address(0x01), NULLIFIER_PROPOSE + 1, 111, proof);
 
         vm.startPrank(bob);
-        vm.expectRevert(HumanBond.HumanBond__UserAlreadyMarried.selector);
+        vm.expectRevert(HumanBond.HumanBond__UserAlreadyBonded.selector);
         humanBond.propose(address(0x02), NULLIFIER_PROPOSE + 2, 111, proof);
     }
 
-    function test_propose_works_afterDivorce() public marriedCouple {
-        _divorce(leticia, bob);
+    function test_propose_works_afterDissolution() public bondedCouple {
+        _dissolution(leticia, bob);
 
-        // Wait out the divorce cooldown before remarrying
+        // Wait out the dissolution cooldown before remarrying
         skip(humanBond.REBOND_COOLDOWN() + 1);
 
         vm.startPrank(leticia);
@@ -184,9 +184,9 @@ contract AutomationFlowTest is Test {
         humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
     }
 
-    function test_accept_reverts_ifCooldownActive() public marriedCouple {
-        // Leticia divorces Bob to trigger cooldown
-        _divorce(leticia, bob);
+    function test_accept_reverts_ifCooldownActive() public bondedCouple {
+        // Leticia dissolutions Bob to trigger cooldown
+        _dissolution(leticia, bob);
 
         // Attempt to accept during cooldown
         vm.startPrank(address(0x04));
@@ -198,19 +198,19 @@ contract AutomationFlowTest is Test {
         humanBond.accept(address(0x04), ROOT, NULLIFIER_ACCEPT, proof);
     }
 
-    function test_accept_getMarriageId_recordsMarriageIdSymmetryAndPushToArray() public marriedCouple {
-        MarriageIdHelper helper = new MarriageIdHelper();
+    function test_accept_getBondId_recordsBondIdSymmetryAndPushToArray() public bondedCouple {
+        BondIdHelper helper = new BondIdHelper();
 
-        bytes32 id1 = helper.exposedGetMarriageId(leticia, bob);
-        bytes32 id2 = helper.exposedGetMarriageId(bob, leticia);
-        bytes32 recordedMarriage = humanBond.marriageIds(0);
+        bytes32 id1 = helper.exposedGetBondId(leticia, bob);
+        bytes32 id2 = helper.exposedGetBondId(bob, leticia);
+        bytes32 recordedBond = humanBond.bondIds(0);
 
-        assertEq(id1, id2, "Marriage IDs should be symmetric");
-        assertEq(recordedMarriage, id1);
+        assertEq(id1, id2, "Bond IDs should be symmetric");
+        assertEq(recordedBond, id1);
     }
 
-    function test_accept_changeAcceptToTrue() public marriedCouple {
-        bool currentStatus = humanBond.isMarried(leticia, bob);
+    function test_accept_changeAcceptToTrue() public bondedCouple {
+        bool currentStatus = humanBond.isBonded(leticia, bob);
 
         assertEq(currentStatus, true);
     }
@@ -268,11 +268,11 @@ contract AutomationFlowTest is Test {
         assertEq(bobIncoming.length, 0);
         assertEq(leticiaIncoming.length, 0);
 
-        // And they are married
-        assertEq(humanBond.isMarried(leticia, bob), true);
+        // And they are bonded
+        assertEq(humanBond.isBonded(leticia, bob), true);
     }
 
-    function test_accpet_MintsBondNFTandSendTokens() public marriedCouple {
+    function test_accpet_MintsBondNFTandSendTokens() public bondedCouple {
         assertEq(bondNft.ownerOf(1), leticia);
         assertEq(bondNft.ownerOf(2), bob);
         assertEq(timeToken.balanceOf(leticia), 1 ether);
@@ -282,34 +282,34 @@ contract AutomationFlowTest is Test {
     //======================================= YIELD TESTS ===============================//
     //===================================================================================//
 
-    function test_pendingYield_returnsZeroWhenMarriageInactive() public marriedCouple {
-        // Kill marriage
-        _divorce(leticia, bob);
+    function test_pendingYield_returnsZeroWhenBondInactive() public bondedCouple {
+        // Kill bond
+        _dissolution(leticia, bob);
 
         uint256 pending = humanBond.getPendingYield(leticia, bob);
         assertEq(pending, 0);
     }
 
-    function test_pendingYield_recordsBalanceCorrectly() public marriedCouple {
+    function test_pendingYield_recordsBalanceCorrectly() public bondedCouple {
         // warp minutes (100 TIME)
         skip(100 minutes);
         uint256 expectedBalance = humanBond.getPendingYield(leticia, bob);
         assertEq(expectedBalance, 100 ether);
     }
 
-    function test_claimYield_reverts_ifNoYield() public marriedCouple {
+    function test_claimYield_reverts_ifNoYield() public bondedCouple {
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__NothingToClaim.selector);
         humanBond.claimYield(bob);
     }
 
-    function test_claimYield_reverts_ifMarriageInactive() public {
+    function test_claimYield_reverts_ifBondInactive() public {
         vm.prank(leticia);
-        vm.expectRevert(HumanBond.HumanBond__NoActiveMarriage.selector);
+        vm.expectRevert(HumanBond.HumanBond__NoActiveBond.selector);
         humanBond.claimYield(bob);
     }
 
-    function test_claimYield_splitsTokensEvenlyAndResetsCounter() public marriedCouple {
+    function test_claimYield_splitsTokensEvenlyAndResetsCounter() public bondedCouple {
         skip(10 minutes);
 
         vm.prank(leticia);
@@ -326,21 +326,21 @@ contract AutomationFlowTest is Test {
 
     //==================================  MILESTONES NFTS ===============================//
     //===================================================================================//
-    function test_manualCheckAndMint_reverts_ifNoActiveMarriage() public {
-        // Leticia is NOT married
+    function test_manualCheckAndMint_reverts_ifNoActiveBond() public {
+        // Leticia is NOT bonded
         vm.prank(leticia);
-        vm.expectRevert(HumanBond.HumanBond__NoActiveMarriage.selector);
+        vm.expectRevert(HumanBond.HumanBond__NoActiveBond.selector);
         humanBond.manualCheckAndMint(bob);
     }
 
-    function test_manualCheckAndMint_reverts_ifYearNotReached() public marriedCouple {
-        // marriage just started
+    function test_manualCheckAndMint_reverts_ifYearNotReached() public bondedCouple {
+        // bond just started
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__NothingToClaim.selector);
         humanBond.manualCheckAndMint(bob);
     }
 
-    function test_manualCheckAndMint_reverts_ifYearExceedsMax() public marriedCouple {
+    function test_manualCheckAndMint_reverts_ifYearExceedsMax() public bondedCouple {
         uint256 max = milestoneNft.latestYear();
 
         // warp to year = 5
@@ -351,7 +351,7 @@ contract AutomationFlowTest is Test {
         humanBond.manualCheckAndMint(bob);
     }
 
-    function test_manualCheckAndMint_mintsWhenYearReached() public marriedCouple {
+    function test_manualCheckAndMint_mintsWhenYearReached() public bondedCouple {
         // warp just over 1 year (YEAR = 3 minutes)
         skip(3 minutes + 1);
 
@@ -366,7 +366,7 @@ contract AutomationFlowTest is Test {
         assertEq(currentYear, 1);
     }
 
-    function test_manualCheckAndMint_reverts_ifAlreadyMintedForYear() public marriedCouple {
+    function test_manualCheckAndMint_reverts_ifAlreadyMintedForYear() public bondedCouple {
         // reach year = 1
         skip(3 minutes + 1);
 
@@ -379,7 +379,7 @@ contract AutomationFlowTest is Test {
         humanBond.manualCheckAndMint(bob);
     }
 
-    function test_manualCheckAndMint_mintsMultipleYears() public marriedCouple {
+    function test_manualCheckAndMint_mintsMultipleYears() public bondedCouple {
         // skip 3 years → YEAR = 3 minutes
         skip(3 * 3 minutes + 1);
 
@@ -401,7 +401,7 @@ contract AutomationFlowTest is Test {
         assertEq(currentYear, 3);
     }
 
-    function test_manualCheckAndMint_capsToLatestYear() public marriedCouple {
+    function test_manualCheckAndMint_capsToLatestYear() public bondedCouple {
         uint256 max = milestoneNft.latestYear(); // suppose = 4
 
         // warp far beyond the max (simulate 10 years)
@@ -431,7 +431,7 @@ contract AutomationFlowTest is Test {
         milestoneNft.ownerOf(9);
     }
 
-    function test_manualCheckAndMint_updatesStateCorrectly() public marriedCouple {
+    function test_manualCheckAndMint_updatesStateCorrectly() public bondedCouple {
         // warp 2 years
         skip(2 * 3 minutes + 1);
 
@@ -447,7 +447,7 @@ contract AutomationFlowTest is Test {
         humanBond.manualCheckAndMint(bob);
     }
 
-    function test_manualCheckAndMint_partialYears() public marriedCouple {
+    function test_manualCheckAndMint_partialYears() public bondedCouple {
         // Only milestone up to 4 years exists
         assertEq(milestoneNft.latestYear(), 4);
 
@@ -465,7 +465,7 @@ contract AutomationFlowTest is Test {
         milestoneNft.ownerOf(9);
     }
 
-    function test_manualCheckAndMint_emitsEventsForAllYears() public marriedCouple {
+    function test_manualCheckAndMint_emitsEventsForAllYears() public bondedCouple {
         skip(2 * 3 minutes + 1);
 
         vm.startPrank(leticia);
@@ -484,7 +484,7 @@ contract AutomationFlowTest is Test {
         assertEq(count, 2);
     }
 
-    function test_tokenURI_decodesCorrectly() public marriedCouple {
+    function test_tokenURI_decodesCorrectly() public bondedCouple {
         skip(3 minutes + 1);
         vm.prank(leticia);
         humanBond.manualCheckAndMint(bob);
@@ -494,46 +494,46 @@ contract AutomationFlowTest is Test {
         console.log(uri);
     }
 
-    //==================================  DIVORCE TESTS ===============================//
+    //=============================  DISSOLUTIONS TESTS ===============================//
     //=================================================================================//
 
-    function test_divorce_reverts_ifNotActiveMarriage() public {
+    function test_dissolution_reverts_ifNotActiveBond() public {
         vm.prank(leticia);
-        vm.expectRevert(HumanBond.HumanBond__NoActiveMarriage.selector);
-        humanBond.requestDivorce(bob);
+        vm.expectRevert(HumanBond.HumanBond__NoActiveBond.selector);
+        humanBond.requestDissolution(bob);
     }
 
-    function test_divorce_reverts_ifNotYourMarriage() public marriedCouple {
-        // attacker tries to divorce them
+    function test_dissolution_reverts_ifNotYourBond() public bondedCouple {
+        // attacker tries to dissolution them
         address attacker = makeAddr("attacker");
 
         vm.prank(attacker);
-        vm.expectRevert(HumanBond.HumanBond__NoActiveMarriage.selector);
-        humanBond.requestDivorce(leticia);
+        vm.expectRevert(HumanBond.HumanBond__NoActiveBond.selector);
+        humanBond.requestDissolution(leticia);
     }
 
-    function test_divorce_claimsPendingYieldAndSplitsEvenly() public marriedCouple {
+    function test_dissolution_claimsPendingYieldAndSplitsEvenly() public bondedCouple {
         // simulate 20 minutes (20 TIME)
         skip(20 minutes);
 
         uint256 expectedSplit = (20 ether) / 2;
 
-        _divorce(leticia, bob);
+        _dissolution(leticia, bob);
 
         // each receives initial 1 + 10
         assertEq(timeToken.balanceOf(leticia), 1 ether + expectedSplit);
         assertEq(timeToken.balanceOf(bob), 1 ether + expectedSplit);
 
-        // marriage should now be inactive
-        bool active = humanBond.isMarried(leticia, bob);
+        // bond should now be inactive
+        bool active = humanBond.isBonded(leticia, bob);
         assertEq(active, false);
     }
 
-    function test_divorce_resetsActiveMarriageMapping() public marriedCouple {
-        _divorce(leticia, bob);
+    function test_dissolution_resetsActiveBondMapping() public bondedCouple {
+        _dissolution(leticia, bob);
 
-        assertEq(humanBond.activeMarriageOf(leticia), bytes32(0));
-        assertEq(humanBond.activeMarriageOf(bob), bytes32(0));
+        assertEq(humanBond.activeBondOf(leticia), bytes32(0));
+        assertEq(humanBond.activeBondOf(bob), bytes32(0));
     }
 
     //============================ PROPOSAL TESTS =======================================//
@@ -719,18 +719,18 @@ contract AutomationFlowTest is Test {
 
     //================================ GETTERS TESTS ==================================//
     //=================================================================================//
-    function test_getMarriageView_returnsCorrectData() public marriedCouple {
-        HumanBond.MarriageView memory v = humanBond.getMarriageView(leticia, bob);
+    function test_getBondView_returnsCorrectData() public bondedCouple {
+        HumanBond.BondView memory v = humanBond.getBondView(leticia, bob);
 
         assertEq(v.partnerA, leticia);
         assertEq(v.partnerB, bob);
         assertEq(v.active, true);
         assertEq(v.lastMilestoneYear, 0);
-        assertEq(v.pendingYield, 0); // just married
-        assertEq(v.marriageId, humanBond.activeMarriageOf(leticia));
+        assertEq(v.pendingYield, 0); // just bonded
+        assertEq(v.bondId, humanBond.activeBondOf(leticia));
     }
 
-    function test_getCurrentMilestoneYear_returnsCorrectYear() public marriedCouple {
+    function test_getCurrentMilestoneYear_returnsCorrectYear() public bondedCouple {
         skip(6 minutes + 1); // warp to year = 2
 
         vm.prank(leticia);
@@ -740,7 +740,7 @@ contract AutomationFlowTest is Test {
         assertEq(year, 2);
     }
 
-    function test_getPendingYield_returnsCorrectValue() public marriedCouple {
+    function test_getPendingYield_returnsCorrectValue() public bondedCouple {
         // Elapsed = 10 minutes → 10 ether (because DAY = 1 minute in test)
         skip(10 minutes);
 
@@ -748,8 +748,8 @@ contract AutomationFlowTest is Test {
         assertEq(pending, 10 ether);
     }
 
-    function test_getBondStart_returnsCorrectTimestamp() public marriedCouple {
-        HumanBond.Marriage memory m = humanBond.getMarriage(leticia, bob);
+    function test_getBondStart_returnsCorrectTimestamp() public bondedCouple {
+        HumanBond.Bond memory m = humanBond.getBond(leticia, bob);
         uint256 stored = humanBond.getBondStart(leticia, bob);
 
         assertEq(stored, m.bondStart);
@@ -768,21 +768,21 @@ contract AutomationFlowTest is Test {
         assertEq(p.proposerNullifier, NULLIFIER_PROPOSE);
     }
 
-    function test_getUserDashboard_unmarriedUser() public view {
+    function test_getUserDashboard_unbondedUser() public view {
         HumanBond.UserDashboard memory d = humanBond.getUserDashboard(leticia);
 
-        assertEq(d.isMarried, false);
+        assertEq(d.isBonded, false);
         assertEq(d.partner, address(0));
         assertEq(d.pendingYield, 0);
     }
 
-    function test_getUserDashboard_marriedUser() public marriedCouple {
+    function test_getUserDashboard_bondedUser() public bondedCouple {
         // warp 5 minutes to accumulate yield
         skip(5 minutes);
 
         HumanBond.UserDashboard memory d = humanBond.getUserDashboard(leticia);
 
-        assertEq(d.isMarried, true);
+        assertEq(d.isBonded, true);
         assertEq(d.partner, bob);
         assertEq(d.pendingYield, 5 ether);
     }
@@ -790,17 +790,17 @@ contract AutomationFlowTest is Test {
     //============================== PROTOCOL COUNTERS ==================================//
     //===================================================================================//
 
-    function test_activeMarriageCount_incrementsOnAccept() public marriedCouple {
-        assertEq(humanBond.activeMarriageCount(), 1);
+    function test_activeBondCount_incrementsOnAccept() public bondedCouple {
+        assertEq(humanBond.activeBondCount(), 1);
     }
 
-    function test_activeMarriageCount_decrementsOnDivorce() public marriedCouple {
-        _divorce(leticia, bob);
+    function test_activeBondCount_decrementsOnDissolution() public bondedCouple {
+        _dissolution(leticia, bob);
 
-        assertEq(humanBond.activeMarriageCount(), 0);
+        assertEq(humanBond.activeBondCount(), 0);
     }
 
-    function test_activeMarriageCount_multipleCouplces() public {
+    function test_activeBondCount_multipleCouplces() public {
         address alice = makeAddr("alice");
         address carol = makeAddr("carol");
 
@@ -816,24 +816,24 @@ contract AutomationFlowTest is Test {
         vm.prank(carol);
         humanBond.accept(alice, ROOT, 2002, proof);
 
-        assertEq(humanBond.activeMarriageCount(), 2);
+        assertEq(humanBond.activeBondCount(), 2);
 
-        // One divorce → count drops to 1
-        _divorce(alice, carol);
+        // One dissolution → count drops to 1
+        _dissolution(alice, carol);
 
-        assertEq(humanBond.activeMarriageCount(), 1);
+        assertEq(humanBond.activeBondCount(), 1);
     }
 
-    function test_totalDivorceCount_incrementsOnDivorce() public marriedCouple {
-        assertEq(humanBond.totalDivorceCount(), 0);
+    function test_totalDissolutionCount_incrementsOnDissolution() public bondedCouple {
+        assertEq(humanBond.totalDissolutionCount(), 0);
 
-        _divorce(leticia, bob);
+        _dissolution(leticia, bob);
 
-        assertEq(humanBond.totalDivorceCount(), 1);
+        assertEq(humanBond.totalDissolutionCount(), 1);
     }
 
-    function test_totalDivorceCount_doesNotDecrementOnRemarry() public marriedCouple {
-        _divorce(leticia, bob);
+    function test_totalDissolutionCount_doesNotDecrementOnRemarry() public bondedCouple {
+        _dissolution(leticia, bob);
 
         // Wait out cooldown and remarry
         skip(humanBond.REBOND_COOLDOWN() + 1);
@@ -843,12 +843,12 @@ contract AutomationFlowTest is Test {
         vm.prank(bob);
         humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
 
-        // Divorce count stays at 1; marriage count is back to 1
-        assertEq(humanBond.totalDivorceCount(), 1);
-        assertEq(humanBond.activeMarriageCount(), 1);
+        // Dissolution count stays at 1; bond count is back to 1
+        assertEq(humanBond.totalDissolutionCount(), 1);
+        assertEq(humanBond.activeBondCount(), 1);
     }
 
-    function test_counters_accumulateAcrossMultipleDivorces() public {
+    function test_counters_accumulateAcrossMultipleDissolutions() public {
         address alice = makeAddr("alice");
         address carol = makeAddr("carol");
 
@@ -864,16 +864,16 @@ contract AutomationFlowTest is Test {
             humanBond.accept(proposers[i], ROOT, nullBase + i * 2 + 1, proof);
         }
 
-        assertEq(humanBond.activeMarriageCount(), 3);
-        assertEq(humanBond.totalDivorceCount(), 0);
+        assertEq(humanBond.activeBondCount(), 3);
+        assertEq(humanBond.totalDissolutionCount(), 0);
 
-        // Divorce all 3
+        // Dissolution all 3
         for (uint256 i = 0; i < 3; i++) {
-            _divorce(proposers[i], acceptors[i]);
+            _dissolution(proposers[i], acceptors[i]);
         }
 
-        assertEq(humanBond.activeMarriageCount(), 0);
-        assertEq(humanBond.totalDivorceCount(), 3);
+        assertEq(humanBond.activeBondCount(), 0);
+        assertEq(humanBond.totalDissolutionCount(), 3);
     }
 
     //====================================TIME TOKEN ====================================//

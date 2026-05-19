@@ -91,23 +91,23 @@ contract MilestoneNFTTest is Test {
         milestone.setMilestoneURI(1, "ipfs://CID1");
         address partnerA = address(0xA1);
         address partnerB = address(0xA2);
-        bytes32 marriageId = bytes32(uint256(1));
+        bytes32 bondId = bytes32(uint256(1));
         uint256 bondStart = 1000;
 
         vm.prank(hb);
-        milestone.mintMilestone(user, 1, partnerA, partnerB, marriageId, bondStart);
+        milestone.mintMilestone(user, 1, partnerA, partnerB, bondId, bondStart);
 
         (
             address storedPartnerA,
             address storedPartnerB,
-            bytes32 storedMarriageId,
+            bytes32 storedbondId,
             uint256 storedBondStart,
             uint256 storedClaimedAt
         ) = milestone.tokenData(1);
 
         assertEq(storedPartnerA, partnerA);
         assertEq(storedPartnerB, partnerB);
-        assertEq(storedMarriageId, marriageId);
+        assertEq(storedbondId, bondId);
         assertEq(storedBondStart, bondStart);
         assertTrue(storedClaimedAt > 0);
     }

@@ -24,7 +24,7 @@ contract MilestoneNFT is ERC721, Ownable {
     struct TokenMetadata {
         address partnerA;
         address partnerB;
-        bytes32 marriageId;
+        bytes32 bondId;
         uint256 bondStart;
         uint256 claimedAt;
     }
@@ -120,7 +120,7 @@ contract MilestoneNFT is ERC721, Ownable {
     /// @param year The milestone year being claimed.
     /// @param partnerA Address of the first partner.
     /// @param partnerB Address of the second partner.
-    /// @param marriageId Unique identifier for the marriage.
+    /// @param bondId Unique identifier for the bond.
     /// @param bondStart Timestamp when the bond was created.
     /// @return tokenId The ID of the newly minted token.
     function mintMilestone(
@@ -128,7 +128,7 @@ contract MilestoneNFT is ERC721, Ownable {
         uint256 year,
         address partnerA,
         address partnerB,
-        bytes32 marriageId,
+        bytes32 bondId,
         uint256 bondStart
     ) external onlyHumanBond returns (uint256) {
         string memory uri = milestoneUrIs[year];
@@ -138,11 +138,7 @@ contract MilestoneNFT is ERC721, Ownable {
         uint256 tokenId = totalSupply;
         tokenYear[tokenId] = year;
         tokenData[tokenId] = TokenMetadata({
-            partnerA: partnerA,
-            partnerB: partnerB,
-            marriageId: marriageId,
-            bondStart: bondStart,
-            claimedAt: block.timestamp
+            partnerA: partnerA, partnerB: partnerB, bondId: bondId, bondStart: bondStart, claimedAt: block.timestamp
         });
         _safeMint(to, tokenId);
 
@@ -176,8 +172,8 @@ contract MilestoneNFT is ERC721, Ownable {
                 '{"trait_type":"Partner B","value":"',
                 Strings.toHexString(uint256(uint160(m.partnerB)), 20),
                 '"},',
-                '{"trait_type":"Marriage ID","value":"',
-                Strings.toHexString(uint256(m.marriageId), 32),
+                '{"trait_type":"Bond ID","value":"',
+                Strings.toHexString(uint256(m.bondId), 32),
                 '"},',
                 '{"trait_type":"Bond Start","value":"',
                 Strings.toString(m.bondStart),

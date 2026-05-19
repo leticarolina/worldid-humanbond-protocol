@@ -9,13 +9,13 @@ contract BondNFTTest is Test {
     address public alice = address(0xA1);
     address public bob = address(0xB2);
     address public stranger = address(0xC3);
-    bytes32 public marriageId;
+    bytes32 public bondId;
 
     function setUp() public {
         // deploy and set this test contract as the authorized minter (humanBondContract)
         bond = new BondNFT();
         bond.setHumanBondContract(address(this));
-        marriageId = keccak256(abi.encodePacked("marriage-1"));
+        bondId = keccak256(abi.encodePacked("bond-1"));
     }
 
     /* ---------------------------
@@ -36,11 +36,11 @@ contract BondNFTTest is Test {
        --------------------------- */
 
     function test_mint_recordsMetadataAndMapping_slot0() public {
-        uint256 tid1 = bond.mintBondNft(alice, alice, bob, 1_610_000_000, marriageId);
+        uint256 tid1 = bond.mintBondNft(alice, alice, bob, 1_610_000_000, bondId);
         assertEq(tid1, 1);
 
         // mapping => slot0 filled, slot1 zero
-        uint256[2] memory tokens = bond.getTokensByMarriage(marriageId);
+        uint256[] memory tokens = bond.getTokensByBond(bondId);
         assertEq(tokens[0], 1);
         assertEq(tokens[1], 0);
 
@@ -48,23 +48,23 @@ contract BondNFTTest is Test {
         assertEq(pA, alice);
         assertEq(pB, bob);
         assertEq(bondStart, 1_610_000_000);
-        assertEq(mid, marriageId);
+        assertEq(mid, bondId);
     }
 
     function test_secondMint_fillsSlot1() public {
-        uint256 t1 = bond.mintBondNft(alice, alice, bob, 1, marriageId);
-        uint256 t2 = bond.mintBondNft(bob, alice, bob, 1, marriageId);
+        uint256 t1 = bond.mintBondNft(alice, alice, bob, 1, bondId);
+        uint256 t2 = bond.mintBondNft(bob, alice, bob, 1, bondId);
 
         assertEq(t1, 1);
         assertEq(t2, 2);
 
-        uint256[2] memory tokens = bond.getTokensByMarriage(marriageId);
+        uint256[] memory tokens = bond.getTokensByBond(bondId);
         assertEq(tokens[0], 1);
         assertEq(tokens[1], 2);
     }
 
     function test_tokenURI_hasDataPrefixAndImageCID() public {
-        bond.mintBondNft(alice, alice, bob, 1_610_000_000, marriageId);
+        bond.mintBondNft(alice, alice, bob, 1_610_000_000, bondId);
         string memory uri = bond.tokenURI(1);
 
         assertTrue(_startsWith(uri, "data:application/json;base64,"), "must return data URI");
@@ -73,7 +73,7 @@ contract BondNFTTest is Test {
     }
 
     function test_console_log_tokenURI_for_manual_inspection() public {
-        uint256 t1 = bond.mintBondNft(alice, alice, bob, 1_610_000_000, marriageId);
+        uint256 t1 = bond.mintBondNft(alice, alice, bob, 1_610_000_000, bondId);
         string memory uri = bond.tokenURI(t1);
 
         // prints during `forge test -vv` so you can copy/paste to a browser or base64 decoder
@@ -115,7 +115,7 @@ contract BondNFTTest is Test {
 
         vm.prank(address(0x222));
         vm.expectRevert(BondNFT.BondNFT__UnauthorizedMinter.selector);
-        bond.mintBondNft(alice, alice, bob, 1, marriageId);
+        bond.mintBondNft(alice, alice, bob, 1, bondId);
     }
 
     /* ---------------------------
@@ -124,7 +124,7 @@ contract BondNFTTest is Test {
 
     function test_transfer_reverts_with_BondNFT__TransfersDisabled() public {
         // mint token id 1 to alice
-        bond.mintBondNft(alice, alice, bob, 1, marriageId);
+        bond.mintBondNft(alice, alice, bob, 1, bondId);
 
         // attempt to transfer from alice -> stranger, should revert with custom error
         vm.prank(alice);
@@ -133,7 +133,7 @@ contract BondNFTTest is Test {
     }
 
     function test_selfTransfer_reverts_soulbound() public {
-        bond.mintBondNft(alice, alice, bob, 1, marriageId);
+        bond.mintBondNft(alice, alice, bob, 1, bondId);
 
         vm.prank(alice);
         vm.expectRevert(BondNFT.BondNFT__TransfersDisabled.selector);

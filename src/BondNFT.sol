@@ -20,18 +20,13 @@ contract BondNFT is ERC721, Ownable {
     error BondNFT__InvalidAddress();
     uint256 public totalSupply;
 
-    string public imageCid =
-        "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai"; //placeholder image CID
+    string public imageCid = "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai"; //placeholder image CID
 
     address public humanBondContract; //authorized minter address
     mapping(uint256 => TokenMetadata) public tokenMetadata;
-    mapping(bytes32 => uint256[]) public marriageToToken; // marriageId -> tokenIds (0 if not set)
+    mapping(bytes32 => uint256[]) public bondToToken; // bondId -> tokenIds (0 if not set)
 
-    event BondMinted(
-        bytes32 indexed marriageId,
-        uint256 indexed tokenId,
-        address indexed to
-    );
+    event BondMinted(bytes32 indexed bondId, uint256 indexed tokenId, address indexed to);
     event HumanBondContractSet(address indexed contractAddress);
     event ImageCidSet(string newCid);
 
@@ -39,7 +34,7 @@ contract BondNFT is ERC721, Ownable {
         address partnerA;
         address partnerB;
         uint256 bondStart;
-        bytes32 marriageId;
+        bytes32 bondId;
     }
 
     modifier onlyHumanBond() {
@@ -70,28 +65,22 @@ contract BondNFT is ERC721, Ownable {
 
     /// @notice Mint a Bond NFT to a given address.
     //only HumanBond contract can mint
-    function mintBondNft(
-        address to,
-        address _partnerA,
-        address _partnerB,
-        uint256 _bondStart,
-        bytes32 _marriageId
-    ) external onlyHumanBond returns (uint256) {
+    function mintBondNft(address to, address _partnerA, address _partnerB, uint256 _bondStart, bytes32 _bondId)
+        external
+        onlyHumanBond
+        returns (uint256)
+    {
         totalSupply++;
         uint256 tokenId = totalSupply;
 
-        tokenMetadata[tokenId] = TokenMetadata({
-            partnerA: _partnerA,
-            partnerB: _partnerB,
-            bondStart: _bondStart,
-            marriageId: _marriageId
-        });
+        tokenMetadata[tokenId] =
+            TokenMetadata({partnerA: _partnerA, partnerB: _partnerB, bondStart: _bondStart, bondId: _bondId});
 
-        marriageToToken[_marriageId].push(tokenId);
+        bondToToken[_bondId].push(tokenId);
 
         _safeMint(to, tokenId);
 
-        emit BondMinted(_marriageId, tokenId, to);
+        emit BondMinted(_bondId, tokenId, to);
 
         return tokenId;
     }
@@ -112,11 +101,11 @@ contract BondNFT is ERC721, Ownable {
                 '{"trait_type":"partnerB","value":"',
                 Strings.toHexString(uint256(uint160(m.partnerB)), 20),
                 '"},',
-                '{"trait_type":"marriageDate","value":"',
+                '{"trait_type":"bondDate","value":"',
                 Strings.toString(m.bondStart),
                 '"},',
-                '{"trait_type":"marriageId","value":"',
-                Strings.toHexString(uint256(m.marriageId), 32),
+                '{"trait_type":"bondId","value":"',
+                Strings.toHexString(uint256(m.bondId), 32),
                 '"}',
                 "]"
             )
@@ -137,19 +126,14 @@ contract BondNFT is ERC721, Ownable {
         );
 
         string memory encoded = Base64.encode(bytes(json));
-        return
-            string(abi.encodePacked("data:application/json;base64,", encoded));
+        return string(abi.encodePacked("data:application/json;base64,", encoded));
     }
 
     /* -------------------------------------------------------------------------- */
     /*                             SOULBOUND OVERRIDES                            */
     /* -------------------------------------------------------------------------- */
     /// @dev Fully soulbound — tokens can only be minted. Transfers and burns are permanently disabled.
-    function _update(
-        address to,
-        uint256 tokenId,
-        address auth
-    ) internal override returns (address) {
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
         address from = _ownerOf(tokenId);
 
         if (from != address(0)) revert BondNFT__TransfersDisabled();
@@ -161,27 +145,18 @@ contract BondNFT is ERC721, Ownable {
     /*                                  GETTERS                                   */
     /* -------------------------------------------------------------------------- */
     /// @notice Getter for token metadata
-    function getTokenMetadata(
-        uint256 id
-    )
+    function getTokenMetadata(uint256 id)
         external
         view
-        returns (
-            address partnerA,
-            address partnerB,
-            uint256 bondStart,
-            bytes32 marriageId
-        )
+        returns (address partnerA, address partnerB, uint256 bondStart, bytes32 bondId)
     {
         _requireOwned(id);
         TokenMetadata memory m = tokenMetadata[id];
-        return (m.partnerA, m.partnerB, m.bondStart, m.marriageId);
+        return (m.partnerA, m.partnerB, m.bondStart, m.bondId);
     }
 
-    /// @notice Get token ids for a marriage (returns [tokenA, tokenB], 0 if slot not set)
-    function getTokensByMarriage(
-        bytes32 marriageId
-    ) external view returns (uint256[] memory) {
-        return marriageToToken[marriageId];
+    /// @notice Get token ids for a bond (returns [tokenA, tokenB], 0 if slot not set)
+    function getTokensByBond(bytes32 bondId) external view returns (uint256[] memory) {
+        return bondToToken[bondId];
     }
 }

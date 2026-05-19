@@ -45,7 +45,7 @@ contract DeployScript is Script {
         //Link contracts
         milestoneNft.setHumanBondContract(address(humanBond)); //Link MilestoneNFT to HumanBond
         bondNft.setHumanBondContract(address(humanBond));
-        timeToken.setHumanBondContract(address(humanBond));
+        timeToken.setMinter(address(humanBond), true);
 
         vm.stopBroadcast();
 
