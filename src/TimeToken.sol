@@ -11,11 +11,13 @@ import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
  */
 contract TimeToken is ERC20, ERC20Burnable, Ownable {
     mapping(address => bool) public authorizedMinters;
+    mapping(address => bool) public authorizedBurners;
 
     error NotAuthorized();
     error InvalidAddress();
 
     event MinterSet(address indexed minter, bool authorized);
+    event BurnerSet(address indexed burner, bool authorized);
 
     constructor() ERC20("TIME", "TIME") Ownable(msg.sender) {}
 
@@ -26,11 +28,26 @@ contract TimeToken is ERC20, ERC20Burnable, Ownable {
         emit MinterSet(minter, authorized);
     }
 
+    /// @notice Set or revoke burner authorization for an address.
+    function setBurner(address burner, bool authorized) external onlyOwner {
+        if (burner == address(0)) revert InvalidAddress();
+        authorizedBurners[burner] = authorized;
+        emit BurnerSet(burner, authorized);
+    }
+
     /// @notice Mint new tokens to a specified address.
     function mint(address to, uint256 amount) external {
         if (msg.sender != owner() && !authorizedMinters[msg.sender]) {
             revert NotAuthorized();
         }
         _mint(to, amount);
+    }
+
+    // authorized contract burning (no approve() needed)
+    function authorizedBurn(address from, uint256 amount) external {
+        if (msg.sender != owner() && !authorizedBurners[msg.sender]) {
+            revert NotAuthorized();
+        }
+        _burn(from, amount);
     }
 }

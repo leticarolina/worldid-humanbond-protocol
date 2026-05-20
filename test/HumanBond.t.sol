@@ -1011,4 +1011,70 @@ contract AutomationFlowTest is Test {
         vm.expectRevert(TimeToken.InvalidAddress.selector);
         timeToken.setMinter(address(0), true);
     }
+
+    function test_timetoken_setBurner_reverts_ifZeroAddress() public {
+        vm.expectRevert(TimeToken.InvalidAddress.selector);
+        timeToken.setBurner(address(0), true);
+    }
+
+    function test_timetoken_setBurner_setsAuthorization() public {
+        timeToken.setBurner(address(humanBond), true);
+        assertEq(timeToken.authorizedBurners(address(humanBond)), true);
+    }
+
+    function test_timetoken_setBurner_revokesAuthorization() public {
+        timeToken.setBurner(address(humanBond), true);
+        timeToken.setBurner(address(humanBond), false);
+        assertEq(timeToken.authorizedBurners(address(humanBond)), false);
+    }
+
+    function test_timetoken_setBurner_emits_BurnerSet() public {
+        vm.expectEmit(address(timeToken));
+        emit TimeToken.BurnerSet(address(humanBond), true);
+        timeToken.setBurner(address(humanBond), true);
+    }
+
+    function test_timetoken_authorizedBurn_reverts_ifNotAuthorized() public {
+        timeToken.mint(leticia, 10 ether);
+
+        vm.prank(address(0x999));
+        vm.expectRevert(TimeToken.NotAuthorized.selector);
+        timeToken.authorizedBurn(leticia, 5 ether);
+    }
+
+    function test_timetoken_authorizedBurn_ownerCanBurn() public {
+        timeToken.mint(leticia, 10 ether);
+        timeToken.authorizedBurn(leticia, 5 ether);
+        assertEq(timeToken.balanceOf(leticia), 5 ether);
+    }
+
+    function test_timetoken_authorizedBurn_authorizedContractCanBurn() public {
+        timeToken.mint(leticia, 10 ether);
+        timeToken.setBurner(address(humanBond), true);
+
+        vm.prank(address(humanBond));
+        timeToken.authorizedBurn(leticia, 4 ether);
+
+        assertEq(timeToken.balanceOf(leticia), 6 ether);
+    }
+
+    function test_timetoken_authorizedBurn_burnsCorrectAmount() public {
+        timeToken.mint(bob, 20 ether);
+        timeToken.setBurner(address(humanBond), true);
+
+        vm.prank(address(humanBond));
+        timeToken.authorizedBurn(bob, 15 ether);
+
+        assertEq(timeToken.balanceOf(bob), 5 ether);
+    }
+
+    function test_timetoken_authorizedBurn_unauthorizedAfterRevoke() public {
+        timeToken.mint(leticia, 10 ether);
+        timeToken.setBurner(address(humanBond), true);
+        timeToken.setBurner(address(humanBond), false);
+
+        vm.prank(address(humanBond));
+        vm.expectRevert(TimeToken.NotAuthorized.selector);
+        timeToken.authorizedBurn(leticia, 5 ether);
+    }
 }
