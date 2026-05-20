@@ -4,7 +4,7 @@ pragma solidity ^0.8.20;
 import {HumanBond} from "../../src/HumanBond.sol";
 
 contract BondIdHelper is HumanBond {
-    constructor() HumanBond(address(0), address(0), address(0), address(0), "", "", "", 0, 0, 0) {}
+    constructor() HumanBond() {}
 
     /// @notice Expose internal function for testing
     function exposedGetBondId(address a, address b) external pure returns (bytes32) {

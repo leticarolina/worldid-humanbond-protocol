@@ -20,7 +20,7 @@ contract BondNFT is ERC721, Ownable {
     error BondNFT__InvalidAddress();
     uint256 public totalSupply;
 
-    string public imageCid = "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai"; //placeholder image CID
+    string public imageURI = "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai"; //placeholder image URI
 
     address public humanBondContract; //authorized minter address
     mapping(uint256 => TokenMetadata) public tokenMetadata;
@@ -28,7 +28,7 @@ contract BondNFT is ERC721, Ownable {
 
     event BondMinted(bytes32 indexed bondId, uint256 indexed tokenId, address indexed to);
     event HumanBondContractSet(address indexed contractAddress);
-    event ImageCidSet(string newCid);
+    event ImageURISet(string newURI);
 
     struct TokenMetadata {
         address partnerA;
@@ -57,10 +57,11 @@ contract BondNFT is ERC721, Ownable {
         emit HumanBondContractSet(contractAddress);
     }
 
-    /// @notice Set the image CID for all NFTs
-    function setImageCid(string calldata newCid) external onlyOwner {
-        imageCid = newCid;
-        emit ImageCidSet(newCid);
+    /// @notice Set the image URI for all NFTs
+    /// @dev e.g. "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai"
+    function setImageURI(string calldata newURI) external onlyOwner {
+        imageURI = newURI;
+        emit ImageURISet(newURI);
     }
 
     /// @notice Mint a Bond NFT to a given address.
@@ -117,7 +118,7 @@ contract BondNFT is ERC721, Ownable {
                 id.toString(),
                 '","description":"A Human Bond recorded on-chain. Each token represents a unique commitment between two World ID verified humans.",',
                 '"image":"',
-                imageCid,
+                imageURI,
                 '",',
                 '"attributes":',
                 attrs,
