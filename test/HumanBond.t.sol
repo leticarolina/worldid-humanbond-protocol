@@ -162,8 +162,6 @@ contract AutomationFlowTest is Test {
         HumanBond.Proposal memory letisProposal = humanBond.getProposal(leticia);
         assertEq(letisProposal.proposer, leticia);
         assertEq(letisProposal.proposed, bob);
-        assertEq(letisProposal.proposerNullifier, NULLIFIER_PROPOSE);
-        assertEq(letisProposal.accepted, false);
         assertEq(letisProposal.timestamp, timeStamp);
     }
 
@@ -685,8 +683,6 @@ contract AutomationFlowTest is Test {
         assertEq(incoming.length, 1);
         assertEq(incoming[0].proposer, leticia);
         assertEq(incoming[0].proposed, bob);
-        assertEq(incoming[0].proposerNullifier, NULLIFIER_PROPOSE);
-        assertEq(incoming[0].accepted, false);
     }
 
     function test_removeProposal_removesCorrectly_singleEntry() public {
@@ -852,8 +848,7 @@ contract AutomationFlowTest is Test {
 
         assertEq(p.proposer, leticia);
         assertEq(p.proposed, bob);
-        assertEq(p.accepted, false);
-        assertEq(p.proposerNullifier, NULLIFIER_PROPOSE);
+        assertEq(p.timestamp, block.timestamp);
     }
 
     function test_getUserDashboard_unbondedUser() public view {

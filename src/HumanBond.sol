@@ -36,8 +36,6 @@ contract HumanBond is Ownable {
     struct Proposal {
         address proposer;
         address proposed;
-        uint256 proposerNullifier;
-        bool accepted;
         uint256 timestamp;
     }
 
@@ -45,8 +43,6 @@ contract HumanBond is Ownable {
     struct Bond {
         address partnerA;
         address partnerB;
-        uint256 nullifierA; //represent human identities from World ID
-        uint256 nullifierB;
         uint256 bondStart;
         uint256 lastClaim;
         uint256 lastMilestoneYear;
@@ -63,8 +59,6 @@ contract HumanBond is Ownable {
     struct BondView {
         address partnerA;
         address partnerB;
-        uint256 nullifierA;
-        uint256 nullifierB;
         uint256 bondStart;
         uint256 lastClaim;
         uint256 lastMilestoneYear;
@@ -178,13 +172,7 @@ contract HumanBond is Ownable {
         WORLD_ID.verifyProof(root, GROUP_ID, signalHash, proposerNullifier, EXTERNAL_NULLIFIER_PROPOSE, proof);
 
         //Store proposal
-        proposals[msg.sender] = Proposal({
-            proposer: msg.sender,
-            proposed: proposed,
-            proposerNullifier: proposerNullifier,
-            accepted: false,
-            timestamp: block.timestamp
-        });
+        proposals[msg.sender] = Proposal({proposer: msg.sender, proposed: proposed, timestamp: block.timestamp});
 
         _addProposal(msg.sender, proposed); //track who proposed to whom
 
@@ -197,14 +185,14 @@ contract HumanBond is Ownable {
     /// @param acceptorNullifier The unique nullifier preventing proof re-use.
     /// @param proof The zero-knowledge proof array.
     function accept(address proposer, uint256 root, uint256 acceptorNullifier, uint256[8] calldata proof) external {
-        Proposal storage proposalOfProposer = proposals[proposer]; // the struct stored, previously created in propose()
+        Proposal storage proposal = proposals[proposer]; // the struct stored, previously created in propose()
         uint256 signalHash = abi.encodePacked(msg.sender).hashToField();
 
         if (block.timestamp - lastDissolutionTimestamp[msg.sender] < REBOND_COOLDOWN) {
             revert HumanBond__CooldownActive();
         }
 
-        if (proposalOfProposer.proposed != msg.sender) {
+        if (proposal.proposed != msg.sender) {
             revert HumanBond__NotProposedToYou();
         }
         if (activeBondOf[proposer] != bytes32(0) || activeBondOf[msg.sender] != bytes32(0)) {
@@ -231,8 +219,6 @@ contract HumanBond is Ownable {
         bonds[bondId] = Bond({
             partnerA: proposer,
             partnerB: msg.sender,
-            nullifierA: proposalOfProposer.proposerNullifier,
-            nullifierB: acceptorNullifier,
             bondStart: block.timestamp,
             lastClaim: block.timestamp,
             lastMilestoneYear: 0,
@@ -424,14 +410,14 @@ contract HumanBond is Ownable {
 
     /// @notice Cancel an existing proposal made by the caller.
     function cancelProposal() external {
-        Proposal memory proposalOfProposer = proposals[msg.sender];
-        if (proposalOfProposer.proposer == address(0)) {
+        Proposal memory proposal = proposals[msg.sender];
+        if (proposal.proposer == address(0)) {
             revert HumanBond__InvalidAddress();
         }
         delete proposals[msg.sender];
-        _removeProposal(msg.sender, proposalOfProposer.proposed);
+        _removeProposal(msg.sender, proposal.proposed);
 
-        emit ProposalCancelled(msg.sender, proposalOfProposer.proposed, block.timestamp);
+        emit ProposalCancelled(msg.sender, proposal.proposed, block.timestamp);
     }
 
     /// @notice Reject an incoming proposal made to the caller.
@@ -544,8 +530,6 @@ contract HumanBond is Ownable {
         v = BondView({
             partnerA: m.partnerA,
             partnerB: m.partnerB,
-            nullifierA: m.nullifierA,
-            nullifierB: m.nullifierB,
             bondStart: m.bondStart,
             lastClaim: m.lastClaim,
             lastMilestoneYear: m.lastMilestoneYear,
