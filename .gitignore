@@ -12,6 +12,7 @@ docs/
 
 # Dotenv file
 .env
+Makefile
 
 # Claude
 .claude/

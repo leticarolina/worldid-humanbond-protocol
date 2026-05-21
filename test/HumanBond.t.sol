@@ -128,7 +128,10 @@ contract AutomationFlowTest is Test {
         humanBond.propose(address(0), ROOT, NULLIFIER_PROPOSE, proof);
     }
 
-    function test_propose_reverts_ifAlreadyHasProposalOpen() public proposalSent {
+    function test_propose_reverts_ifAlreadyHasProposalOpen()
+        public
+        proposalSent
+    {
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__ProposalAlreadyExists.selector);
         humanBond.propose(address(0x01), NULLIFIER_PROPOSE + 1, 111, proof);
@@ -160,7 +163,9 @@ contract AutomationFlowTest is Test {
 
     function test_propose_sucessfully_storeProposal() public proposalSent {
         uint256 timeStamp = block.timestamp;
-        HumanBond.Proposal memory letisProposal = humanBond.getProposal(leticia);
+        HumanBond.Proposal memory letisProposal = humanBond.getProposal(
+            leticia
+        );
         assertEq(letisProposal.proposer, leticia);
         assertEq(letisProposal.proposed, bob);
         assertEq(letisProposal.timestamp, timeStamp);
@@ -178,7 +183,10 @@ contract AutomationFlowTest is Test {
     //============================ ACCEPTANCE TESTS =======================================//
     //=====================================================================================//
 
-    function test_accept_reverts_ifNotCorrectPartnerAccept() public proposalSent {
+    function test_accept_reverts_ifNotCorrectPartnerAccept()
+        public
+        proposalSent
+    {
         vm.expectRevert(HumanBond.HumanBond__NotProposedToYou.selector);
         humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
     }
@@ -213,7 +221,10 @@ contract AutomationFlowTest is Test {
         humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
     }
 
-    function test_accept_getBondId_recordsBondIdSymmetryAndPushToArray() public bondedCouple {
+    function test_accept_getBondId_recordsBondIdSymmetryAndPushToArray()
+        public
+        bondedCouple
+    {
         BondIdHelper helper = new BondIdHelper();
 
         bytes32 id1 = helper.exposedGetBondId(leticia, bob);
@@ -247,7 +258,9 @@ contract AutomationFlowTest is Test {
         vm.prank(bob);
         humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
 
-        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
+        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(
+            bob
+        );
         assertEq(incoming.length, 0);
 
         HumanBond.Proposal memory p = humanBond.getProposal(leticia);
@@ -263,7 +276,8 @@ contract AutomationFlowTest is Test {
         humanBond.propose(leticia, ROOT, NULLIFIER_ACCEPT, proof);
 
         // Bob's proposal should appear in leticia's incoming list
-        HumanBond.Proposal[] memory leticiaIncoming = humanBond.getIncomingProposals(leticia);
+        HumanBond.Proposal[] memory leticiaIncoming = humanBond
+            .getIncomingProposals(leticia);
         assertEq(leticiaIncoming.length, 1);
         assertEq(leticiaIncoming[0].proposer, bob);
 
@@ -272,13 +286,16 @@ contract AutomationFlowTest is Test {
         humanBond.accept(leticia, ROOT, NULLIFIER_ACCEPT, proof);
 
         // Neither outgoing proposal should remain
-        HumanBond.Proposal memory leticiaProposal = humanBond.getProposal(leticia);
+        HumanBond.Proposal memory leticiaProposal = humanBond.getProposal(
+            leticia
+        );
         HumanBond.Proposal memory bobProposal = humanBond.getProposal(bob);
         assertEq(leticiaProposal.proposer, address(0));
         assertEq(bobProposal.proposer, address(0));
 
         // Neither should appear in the other's incoming list
-        HumanBond.Proposal[] memory bobIncoming = humanBond.getIncomingProposals(bob);
+        HumanBond.Proposal[] memory bobIncoming = humanBond
+            .getIncomingProposals(bob);
         leticiaIncoming = humanBond.getIncomingProposals(leticia);
         assertEq(bobIncoming.length, 0);
         assertEq(leticiaIncoming.length, 0);
@@ -297,7 +314,10 @@ contract AutomationFlowTest is Test {
     //======================================= YIELD TESTS ===============================//
     //===================================================================================//
 
-    function test_pendingYield_returnsZeroWhenBondInactive() public bondedCouple {
+    function test_pendingYield_returnsZeroWhenBondInactive()
+        public
+        bondedCouple
+    {
         // Kill bond
         _dissolution(leticia, bob);
 
@@ -324,7 +344,10 @@ contract AutomationFlowTest is Test {
         humanBond.claimYield(bob);
     }
 
-    function test_claimYield_splitsTokensEvenlyAndResetsCounter() public bondedCouple {
+    function test_claimYield_splitsTokensEvenlyAndResetsCounter()
+        public
+        bondedCouple
+    {
         skip(10 minutes);
 
         vm.prank(leticia);
@@ -348,14 +371,20 @@ contract AutomationFlowTest is Test {
         humanBond.manualCheckAndMint(bob);
     }
 
-    function test_manualCheckAndMint_reverts_ifYearNotReached() public bondedCouple {
+    function test_manualCheckAndMint_reverts_ifYearNotReached()
+        public
+        bondedCouple
+    {
         // bond just started
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__NothingToClaim.selector);
         humanBond.manualCheckAndMint(bob);
     }
 
-    function test_manualCheckAndMint_reverts_ifYearExceedsMax() public bondedCouple {
+    function test_manualCheckAndMint_reverts_ifYearExceedsMax()
+        public
+        bondedCouple
+    {
         uint256 max = milestoneNft.latestYear();
 
         // warp to year = 5
@@ -366,7 +395,10 @@ contract AutomationFlowTest is Test {
         humanBond.manualCheckAndMint(bob);
     }
 
-    function test_manualCheckAndMint_mintsWhenYearReached() public bondedCouple {
+    function test_manualCheckAndMint_mintsWhenYearReached()
+        public
+        bondedCouple
+    {
         // warp just over 1 year (YEAR = 3 minutes)
         skip(3 minutes + 1);
 
@@ -381,7 +413,10 @@ contract AutomationFlowTest is Test {
         assertEq(currentYear, 1);
     }
 
-    function test_manualCheckAndMint_reverts_ifAlreadyMintedForYear() public bondedCouple {
+    function test_manualCheckAndMint_reverts_ifAlreadyMintedForYear()
+        public
+        bondedCouple
+    {
         // reach year = 1
         skip(3 minutes + 1);
 
@@ -446,7 +481,10 @@ contract AutomationFlowTest is Test {
         milestoneNft.ownerOf(9);
     }
 
-    function test_manualCheckAndMint_updatesStateCorrectly() public bondedCouple {
+    function test_manualCheckAndMint_updatesStateCorrectly()
+        public
+        bondedCouple
+    {
         // warp 2 years
         skip(2 * 3 minutes + 1);
 
@@ -480,7 +518,10 @@ contract AutomationFlowTest is Test {
         milestoneNft.ownerOf(9);
     }
 
-    function test_manualCheckAndMint_emitsEventsForAllYears() public bondedCouple {
+    function test_manualCheckAndMint_emitsEventsForAllYears()
+        public
+        bondedCouple
+    {
         skip(2 * 3 minutes + 1);
 
         vm.startPrank(leticia);
@@ -492,7 +533,12 @@ contract AutomationFlowTest is Test {
         // should emit 2 AnniversaryAchieved events (one per year)
         uint256 count;
         for (uint256 i; i < entries.length; i++) {
-            if (entries[i].topics[0] == keccak256("AnniversaryAchieved(address,address,uint256,uint256)")) {
+            if (
+                entries[i].topics[0] ==
+                keccak256(
+                    "AnniversaryAchieved(address,address,uint256,uint256)"
+                )
+            ) {
                 count++;
             }
         }
@@ -527,7 +573,10 @@ contract AutomationFlowTest is Test {
         humanBond.requestDissolution(leticia);
     }
 
-    function test_dissolution_claimsPendingYieldAndSplitsEvenly() public bondedCouple {
+    function test_dissolution_claimsPendingYieldAndSplitsEvenly()
+        public
+        bondedCouple
+    {
         // simulate 20 minutes (20 TIME)
         skip(20 minutes);
 
@@ -551,12 +600,17 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.activeBondOf(bob), bytes32(0));
     }
 
-    function test_requestDissolution_reverts_ifAlreadyRequested() public bondedCouple {
+    function test_requestDissolution_reverts_ifAlreadyRequested()
+        public
+        bondedCouple
+    {
         vm.prank(leticia);
         humanBond.requestDissolution(bob);
 
         vm.prank(leticia);
-        vm.expectRevert(HumanBond.HumanBond__DissolutionAlreadyRequested.selector);
+        vm.expectRevert(
+            HumanBond.HumanBond__DissolutionAlreadyRequested.selector
+        );
         humanBond.requestDissolution(bob);
     }
 
@@ -566,13 +620,19 @@ contract AutomationFlowTest is Test {
         humanBond.executeDissolution(bob);
     }
 
-    function test_executeDissolution_reverts_ifNoDissolutionRequest() public bondedCouple {
+    function test_executeDissolution_reverts_ifNoDissolutionRequest()
+        public
+        bondedCouple
+    {
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__NoDissolutionRequest.selector);
         humanBond.executeDissolution(bob);
     }
 
-    function test_executeDissolution_reverts_ifNotRequester() public bondedCouple {
+    function test_executeDissolution_reverts_ifNotRequester()
+        public
+        bondedCouple
+    {
         vm.prank(leticia);
         humanBond.requestDissolution(bob);
 
@@ -581,7 +641,10 @@ contract AutomationFlowTest is Test {
         humanBond.executeDissolution(leticia);
     }
 
-    function test_executeDissolution_reverts_ifDelayNotMet() public bondedCouple {
+    function test_executeDissolution_reverts_ifDelayNotMet()
+        public
+        bondedCouple
+    {
         vm.expectEmit(address(humanBond));
         emit HumanBond.DissolutionDelayUpdated(3 days);
         humanBond.setDissolutionDelay(3 days);
@@ -594,29 +657,40 @@ contract AutomationFlowTest is Test {
         humanBond.executeDissolution(bob);
     }
 
-    function test_cancelDissolutionRequest_cancelsSuccessfully() public bondedCouple {
+    function test_cancelDissolutionRequest_cancelsSuccessfully()
+        public
+        bondedCouple
+    {
         vm.prank(leticia);
         humanBond.requestDissolution(bob);
 
-        HumanBond.DissolutionRequest memory req = humanBond.getDissolutionRequest(leticia, bob);
+        HumanBond.DissolutionRequest memory req = humanBond
+            .getDissolutionRequest(leticia, bob);
         assertEq(req.active, true);
         assertEq(req.requester, leticia);
 
         vm.prank(leticia);
         humanBond.cancelDissolutionRequest(bob);
 
-        HumanBond.DissolutionRequest memory reqAfter = humanBond.getDissolutionRequest(leticia, bob);
+        HumanBond.DissolutionRequest memory reqAfter = humanBond
+            .getDissolutionRequest(leticia, bob);
         assertEq(reqAfter.active, false);
         assertEq(humanBond.isBonded(leticia, bob), true);
     }
 
-    function test_cancelDissolutionRequest_reverts_ifNoRequest() public bondedCouple {
+    function test_cancelDissolutionRequest_reverts_ifNoRequest()
+        public
+        bondedCouple
+    {
         vm.prank(leticia);
         vm.expectRevert(HumanBond.HumanBond__NoDissolutionRequest.selector);
         humanBond.cancelDissolutionRequest(bob);
     }
 
-    function test_cancelDissolutionRequest_reverts_ifNotRequester() public bondedCouple {
+    function test_cancelDissolutionRequest_reverts_ifNotRequester()
+        public
+        bondedCouple
+    {
         vm.prank(leticia);
         humanBond.requestDissolution(bob);
 
@@ -649,7 +723,9 @@ contract AutomationFlowTest is Test {
         humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
 
         // Check via the getter
-        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
+        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(
+            bob
+        );
 
         assertEq(incoming.length, 1);
         assertEq(incoming[0].proposer, leticia);
@@ -668,7 +744,9 @@ contract AutomationFlowTest is Test {
         vm.prank(alice);
         humanBond.propose(bob, ROOT, 9002, proof);
 
-        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
+        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(
+            bob
+        );
 
         assertEq(incoming.length, 2);
 
@@ -681,7 +759,9 @@ contract AutomationFlowTest is Test {
         vm.prank(leticia);
         humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
 
-        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
+        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(
+            bob
+        );
 
         assertEq(incoming.length, 1);
         assertEq(incoming[0].proposer, leticia);
@@ -695,7 +775,9 @@ contract AutomationFlowTest is Test {
         vm.prank(leticia);
         humanBond.cancelProposal();
 
-        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
+        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(
+            bob
+        );
         assertEq(incoming.length, 0);
 
         // proposal struct cleared
@@ -720,7 +802,9 @@ contract AutomationFlowTest is Test {
         vm.prank(alice);
         humanBond.cancelProposal();
 
-        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
+        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(
+            bob
+        );
 
         assertEq(incoming.length, 2);
 
@@ -733,7 +817,10 @@ contract AutomationFlowTest is Test {
     //============================ REJECT PROPOSAL TESTS ================================//
     //===================================================================================//
 
-    function test_rejectProposal_reverts_ifNotProposedToYou() public proposalSent {
+    function test_rejectProposal_reverts_ifNotProposedToYou()
+        public
+        proposalSent
+    {
         // Carol tries to reject a proposal not directed to her
         address carol = makeAddr("carol");
         vm.prank(carol);
@@ -757,11 +844,16 @@ contract AutomationFlowTest is Test {
         assertEq(p.proposed, address(0));
     }
 
-    function test_rejectProposal_removesFromIncomingProposals() public proposalSent {
+    function test_rejectProposal_removesFromIncomingProposals()
+        public
+        proposalSent
+    {
         vm.prank(bob);
         humanBond.rejectProposal(leticia);
 
-        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
+        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(
+            bob
+        );
         assertEq(incoming.length, 0);
     }
 
@@ -773,7 +865,10 @@ contract AutomationFlowTest is Test {
         humanBond.rejectProposal(leticia);
     }
 
-    function test_rejectProposal_allowsProposerToReproposeAfterRejection() public proposalSent {
+    function test_rejectProposal_allowsProposerToReproposeAfterRejection()
+        public
+        proposalSent
+    {
         vm.prank(bob);
         humanBond.rejectProposal(leticia);
 
@@ -786,7 +881,9 @@ contract AutomationFlowTest is Test {
         assertEq(p.proposed, bob);
     }
 
-    function test_rejectProposal_removesCorrectProposal_fromMultipleIncoming() public {
+    function test_rejectProposal_removesCorrectProposal_fromMultipleIncoming()
+        public
+    {
         address alice = makeAddr("alice");
 
         vm.prank(leticia);
@@ -799,7 +896,9 @@ contract AutomationFlowTest is Test {
         vm.prank(bob);
         humanBond.rejectProposal(leticia);
 
-        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(bob);
+        HumanBond.Proposal[] memory incoming = humanBond.getIncomingProposals(
+            bob
+        );
         assertEq(incoming.length, 1);
         assertEq(incoming[0].proposer, alice);
     }
@@ -817,7 +916,10 @@ contract AutomationFlowTest is Test {
         assertEq(v.bondId, humanBond.activeBondOf(leticia));
     }
 
-    function test_getCurrentMilestoneYear_returnsCorrectYear() public bondedCouple {
+    function test_getCurrentMilestoneYear_returnsCorrectYear()
+        public
+        bondedCouple
+    {
         skip(6 minutes + 1); // warp to year = 2
 
         vm.prank(leticia);
@@ -889,8 +991,12 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.hasPendingProposal(leticia), true);
     }
 
-    function test_getDissolutionRequest_returnsCorrectData() public bondedCouple {
-        HumanBond.DissolutionRequest memory req = humanBond.getDissolutionRequest(leticia, bob);
+    function test_getDissolutionRequest_returnsCorrectData()
+        public
+        bondedCouple
+    {
+        HumanBond.DissolutionRequest memory req = humanBond
+            .getDissolutionRequest(leticia, bob);
         assertEq(req.active, false);
 
         vm.prank(leticia);
@@ -908,7 +1014,10 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.activeBondCount(), 1);
     }
 
-    function test_activeBondCount_decrementsOnDissolution() public bondedCouple {
+    function test_activeBondCount_decrementsOnDissolution()
+        public
+        bondedCouple
+    {
         _dissolution(leticia, bob);
 
         assertEq(humanBond.activeBondCount(), 0);
@@ -938,7 +1047,10 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.activeBondCount(), 1);
     }
 
-    function test_totalDissolutionCount_incrementsOnDissolution() public bondedCouple {
+    function test_totalDissolutionCount_incrementsOnDissolution()
+        public
+        bondedCouple
+    {
         assertEq(humanBond.totalDissolutionCount(), 0);
 
         _dissolution(leticia, bob);
@@ -946,7 +1058,10 @@ contract AutomationFlowTest is Test {
         assertEq(humanBond.totalDissolutionCount(), 1);
     }
 
-    function test_totalDissolutionCount_doesNotDecrementOnRebond() public bondedCouple {
+    function test_totalDissolutionCount_doesNotDecrementOnRebond()
+        public
+        bondedCouple
+    {
         _dissolution(leticia, bob);
 
         // Wait out cooldown and rebond
@@ -1124,7 +1239,10 @@ contract AutomationFlowTest is Test {
         humanBond.setRebondCooldown(7 days);
     }
 
-    function test_setRebondCooldown_zero_allowsImmediateRebond() public bondedCouple {
+    function test_setRebondCooldown_zero_allowsImmediateRebond()
+        public
+        bondedCouple
+    {
         _dissolution(leticia, bob);
 
         // Set cooldown to zero — leticia can propose immediately
@@ -1198,7 +1316,10 @@ contract AutomationFlowTest is Test {
         humanBond.setYearDuration(10 minutes);
     }
 
-    function test_setYearDuration_affectsMilestoneEligibility() public bondedCouple {
+    function test_setYearDuration_affectsMilestoneEligibility()
+        public
+        bondedCouple
+    {
         // Set year duration to 10 minutes (longer than default 3 minutes)
         humanBond.setYearDuration(10 minutes);
 
@@ -1245,5 +1366,57 @@ contract AutomationFlowTest is Test {
         vm.prank(leticia);
         humanBond.executeDissolution(bob);
         assertEq(humanBond.isBonded(leticia, bob), false);
+    }
+
+    // ---- setBondNft ----
+
+    function test_setBondNft_reverts_ifNotOwner() public {
+        vm.prank(leticia);
+        vm.expectRevert();
+        humanBond.setBondNft(address(0x99));
+    }
+
+    function test_setBondNft_reverts_ifZeroAddress() public {
+        vm.expectRevert(HumanBond.HumanBond__InvalidAddress.selector);
+        humanBond.setBondNft(address(0));
+    }
+
+    function test_setBondNft_updatesValue() public {
+        address newBondNft = address(new BondNFT());
+        humanBond.setBondNft(newBondNft);
+        assertEq(address(humanBond.bondNft()), newBondNft);
+    }
+
+    function test_setBondNft_emits_BondNftUpdated() public {
+        address newBondNft = address(new BondNFT());
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.BondNftUpdated(newBondNft);
+        humanBond.setBondNft(newBondNft);
+    }
+
+    // ---- setMilestoneNft ----
+
+    function test_setMilestoneNft_reverts_ifNotOwner() public {
+        vm.prank(leticia);
+        vm.expectRevert();
+        humanBond.setMilestoneNft(address(0x99));
+    }
+
+    function test_setMilestoneNft_reverts_ifZeroAddress() public {
+        vm.expectRevert(HumanBond.HumanBond__InvalidAddress.selector);
+        humanBond.setMilestoneNft(address(0));
+    }
+
+    function test_setMilestoneNft_updatesValue() public {
+        address newMilestoneNft = address(new MilestoneNFT());
+        humanBond.setMilestoneNft(newMilestoneNft);
+        assertEq(address(humanBond.milestoneNft()), newMilestoneNft);
+    }
+
+    function test_setMilestoneNft_emits_MilestoneNftUpdated() public {
+        address newMilestoneNft = address(new MilestoneNFT());
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.MilestoneNftUpdated(newMilestoneNft);
+        humanBond.setMilestoneNft(newMilestoneNft);
     }
 }

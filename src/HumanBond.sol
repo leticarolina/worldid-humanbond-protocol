@@ -34,7 +34,7 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     error HumanBond__DissolutionDelayNotMet();
 
     /* ----------------------------- STRUCTS ----------------------------- */
-    //Represents a pending bond request:
+    //Represents a pending bond request
     struct Proposal {
         address proposer;
         address proposed;
@@ -107,22 +107,60 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     uint256[30] private __gap;
 
     /* ----------------------------- EVENTS ----------------------------- */
-    event ProposalCreated(address indexed proposer, address indexed proposed, uint256 timestamp);
-    event ProposalAccepted(address indexed partnerA, address indexed partnerB, uint256 timestamp);
-    event YieldClaimed(address indexed partnerA, address indexed partnerB, uint256 rewardEach);
-    event AnniversaryAchieved(address indexed partnerA, address indexed partnerB, uint256 year, uint256 timestamp);
-    event BondDissolved(address indexed partnerA, address indexed partnerB, uint256 timestamp);
-    event ProposalCancelled(address indexed proposer, address indexed proposed, uint256 timestamp);
-    event ProposalRejected(address indexed proposer, address indexed proposed, uint256 timestamp);
-    event DissolutionRequested(
-        address indexed partnerA, address indexed partnerB, address indexed requester, uint256 timestamp
+    event ProposalCreated(
+        address indexed proposer,
+        address indexed proposed,
+        uint256 timestamp
     );
-    event DissolutionRequestCancelled(address indexed partnerA, address indexed partnerB, uint256 timestamp);
+    event ProposalAccepted(
+        address indexed partnerA,
+        address indexed partnerB,
+        uint256 timestamp
+    );
+    event YieldClaimed(
+        address indexed partnerA,
+        address indexed partnerB,
+        uint256 rewardEach
+    );
+    event AnniversaryAchieved(
+        address indexed partnerA,
+        address indexed partnerB,
+        uint256 year,
+        uint256 timestamp
+    );
+    event BondDissolved(
+        address indexed partnerA,
+        address indexed partnerB,
+        uint256 timestamp
+    );
+    event ProposalCancelled(
+        address indexed proposer,
+        address indexed proposed,
+        uint256 timestamp
+    );
+    event ProposalRejected(
+        address indexed proposer,
+        address indexed proposed,
+        uint256 timestamp
+    );
+    event DissolutionRequested(
+        address indexed partnerA,
+        address indexed partnerB,
+        address indexed requester,
+        uint256 timestamp
+    );
+    event DissolutionRequestCancelled(
+        address indexed partnerA,
+        address indexed partnerB,
+        uint256 timestamp
+    );
     event WorldIdUpdated(address indexed newWorldId);
     event RebondCooldownUpdated(uint256 newCooldown);
     event DayDurationUpdated(uint256 newDayDuration);
     event YearDurationUpdated(uint256 newYearDuration);
     event DissolutionDelayUpdated(uint256 newDissolutionDelay);
+    event BondNftUpdated(address indexed newBondNft);
+    event MilestoneNftUpdated(address indexed newMilestoneNft);
 
     /* --------------------------- INITIALIZER -------------------------- */
     function initialize(
@@ -140,16 +178,24 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         bondNft = BondNFT(_bondNft);
         timeToken = TimeToken(_timeToken);
         milestoneNft = MilestoneNFT(_milestoneNft);
-        externalNullifierPropose =
-            abi.encodePacked(abi.encodePacked(_appId).hashToField(), _actionPropose).hashToField();
-        externalNullifierAccept = abi.encodePacked(abi.encodePacked(_appId).hashToField(), _actionAccept).hashToField();
+        externalNullifierPropose = abi
+            .encodePacked(
+                abi.encodePacked(_appId).hashToField(),
+                _actionPropose
+            )
+            .hashToField();
+        externalNullifierAccept = abi
+            .encodePacked(abi.encodePacked(_appId).hashToField(), _actionAccept)
+            .hashToField();
         dayDuration = 1 days;
         yearDuration = 365 days;
         rebondCooldown = 30 days;
         dissolutionDelay = 3 days;
     }
 
-    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
+    function _authorizeUpgrade(
+        address newImplementation
+    ) internal override onlyOwner {}
 
     /* ---------------------------- FUNCTIONS --------------------------- */
 
@@ -158,8 +204,16 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param root The World ID root from the proof.
     /// @param proposerNullifier The unique nullifier preventing proof re-use.
     /// @param proof The zero-knowledge proof array.
-    function propose(address proposed, uint256 root, uint256 proposerNullifier, uint256[8] calldata proof) external {
-        if (block.timestamp - lastDissolutionTimestamp[msg.sender] < rebondCooldown) {
+    function propose(
+        address proposed,
+        uint256 root,
+        uint256 proposerNullifier,
+        uint256[8] calldata proof
+    ) external {
+        if (
+            block.timestamp - lastDissolutionTimestamp[msg.sender] <
+            rebondCooldown
+        ) {
             revert HumanBond__CooldownActive();
         }
         if (proposed == address(0)) {
@@ -171,15 +225,29 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         if (proposals[msg.sender].proposer != address(0)) {
             revert HumanBond__ProposalAlreadyExists();
         }
-        if (activeBondOf[msg.sender] != bytes32(0) || activeBondOf[proposed] != bytes32(0)) {
+        if (
+            activeBondOf[msg.sender] != bytes32(0) ||
+            activeBondOf[proposed] != bytes32(0)
+        ) {
             revert HumanBond__UserAlreadyBonded();
         }
         uint256 signalHash = abi.encodePacked(msg.sender).hashToField(); //prove msg.sender is signer
         // Verify proposer is a real human via World ID
-        worldId.verifyProof(root, GROUP_ID, signalHash, proposerNullifier, externalNullifierPropose, proof);
+        worldId.verifyProof(
+            root,
+            GROUP_ID,
+            signalHash,
+            proposerNullifier,
+            externalNullifierPropose,
+            proof
+        );
 
         //Store proposal
-        proposals[msg.sender] = Proposal({proposer: msg.sender, proposed: proposed, timestamp: block.timestamp});
+        proposals[msg.sender] = Proposal({
+            proposer: msg.sender,
+            proposed: proposed,
+            timestamp: block.timestamp
+        });
 
         _addProposal(msg.sender, proposed); //track who proposed to whom
 
@@ -191,18 +259,29 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @param root The World ID root from the proof.
     /// @param acceptorNullifier The unique nullifier preventing proof re-use.
     /// @param proof The zero-knowledge proof array.
-    function accept(address proposer, uint256 root, uint256 acceptorNullifier, uint256[8] calldata proof) external {
+    function accept(
+        address proposer,
+        uint256 root,
+        uint256 acceptorNullifier,
+        uint256[8] calldata proof
+    ) external {
         Proposal storage proposal = proposals[proposer]; // the struct stored, previously created in propose()
         uint256 signalHash = abi.encodePacked(msg.sender).hashToField();
 
-        if (block.timestamp - lastDissolutionTimestamp[msg.sender] < rebondCooldown) {
+        if (
+            block.timestamp - lastDissolutionTimestamp[msg.sender] <
+            rebondCooldown
+        ) {
             revert HumanBond__CooldownActive();
         }
 
         if (proposal.proposed != msg.sender) {
             revert HumanBond__NotProposedToYou();
         }
-        if (activeBondOf[proposer] != bytes32(0) || activeBondOf[msg.sender] != bytes32(0)) {
+        if (
+            activeBondOf[proposer] != bytes32(0) ||
+            activeBondOf[msg.sender] != bytes32(0)
+        ) {
             revert HumanBond__UserAlreadyBonded();
         } //not reaching, propose function reverts before
 
@@ -245,8 +324,20 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         bondIds.push(bondId);
 
         // Mint identical NFTs for both partners
-        bondNft.mintBondNft(proposer, proposer, msg.sender, block.timestamp, bondId);
-        bondNft.mintBondNft(msg.sender, proposer, msg.sender, block.timestamp, bondId);
+        bondNft.mintBondNft(
+            proposer,
+            proposer,
+            msg.sender,
+            block.timestamp,
+            bondId
+        );
+        bondNft.mintBondNft(
+            msg.sender,
+            proposer,
+            msg.sender,
+            block.timestamp,
+            bondId
+        );
 
         // Reward both parties with 1 TOKEN immediately
         timeToken.mint(proposer, 1 ether);
@@ -268,10 +359,18 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
             revert HumanBond__DissolutionAlreadyRequested();
         }
 
-        dissolutionRequests[bondId] =
-            DissolutionRequest({requester: msg.sender, requestedAt: block.timestamp, active: true});
+        dissolutionRequests[bondId] = DissolutionRequest({
+            requester: msg.sender,
+            requestedAt: block.timestamp,
+            active: true
+        });
 
-        emit DissolutionRequested(bond.partnerA, bond.partnerB, msg.sender, block.timestamp);
+        emit DissolutionRequested(
+            bond.partnerA,
+            bond.partnerB,
+            msg.sender,
+            block.timestamp
+        );
     }
 
     /// @notice Execute a previously requested dissolution once the delay has elapsed.
@@ -320,7 +419,11 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         Bond storage bond = bonds[bondId];
         delete dissolutionRequests[bondId];
 
-        emit DissolutionRequestCancelled(bond.partnerA, bond.partnerB, block.timestamp);
+        emit DissolutionRequestCancelled(
+            bond.partnerA,
+            bond.partnerB,
+            block.timestamp
+        );
     }
 
     /* ---------------------------- YIELD LOGIC --------------------------- */
@@ -381,7 +484,9 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         }
 
         // if yearsTogether exceeds highestYearSet, cap it to highestYearSet
-        uint256 endYear = yearsTogether > highestYearSet ? highestYearSet : yearsTogether;
+        uint256 endYear = yearsTogether > highestYearSet
+            ? highestYearSet
+            : yearsTogether;
         uint256 startYear = lastClaimed + 1; // the year after the last claimed milestone, +1 to avoid double minting
 
         // if the last claimed year is already the highest year set, nothing to mint
@@ -393,10 +498,15 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         m.lastMilestoneYear = endYear;
     }
 
-    function _mintYearRange(address a, address b, bytes32 id, uint256 startYear, uint256 endYear, uint256 bondStart)
-        internal
-    {
-        for (uint256 y = startYear; y <= endYear;) {
+    function _mintYearRange(
+        address a,
+        address b,
+        bytes32 id,
+        uint256 startYear,
+        uint256 endYear,
+        uint256 bondStart
+    ) internal {
+        for (uint256 y = startYear; y <= endYear; ) {
             milestoneNft.mintMilestone(a, y, a, b, id, bondStart);
             milestoneNft.mintMilestone(b, y, a, b, id, bondStart);
 
@@ -462,7 +572,10 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     /// @dev Generate a unique bond ID for a couple based on their addresses.
     ///      Order of addresses does not matter.
     function _getBondId(address a, address b) internal pure returns (bytes32) {
-        return a < b ? keccak256(abi.encodePacked(a, b)) : keccak256(abi.encodePacked(b, a));
+        return
+            a < b
+                ? keccak256(abi.encodePacked(a, b))
+                : keccak256(abi.encodePacked(b, a));
     }
 
     /* --------------------------- SETTERS MANAGEMENT -------------------------- */
@@ -497,10 +610,26 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
         emit YearDurationUpdated(_year);
     }
 
+    /// @notice Owner can update the BondNFT contract address.
+    function setBondNft(address _bondNft) external onlyOwner {
+        if (_bondNft == address(0)) revert HumanBond__InvalidAddress();
+        bondNft = BondNFT(_bondNft);
+        emit BondNftUpdated(_bondNft);
+    }
+
+    /// @notice Owner can update the MilestoneNFT contract address.
+    function setMilestoneNft(address _milestoneNft) external onlyOwner {
+        if (_milestoneNft == address(0)) revert HumanBond__InvalidAddress();
+        milestoneNft = MilestoneNFT(_milestoneNft);
+        emit MilestoneNftUpdated(_milestoneNft);
+    }
+
     /* --------------------------- GETTERS FUNCTIONS -------------------------- */
 
     /// @dev Get all incoming proposals for a user, meaning proposals made to them.
-    function getIncomingProposals(address user) external view returns (Proposal[] memory) {
+    function getIncomingProposals(
+        address user
+    ) external view returns (Proposal[] memory) {
         address[] memory proposers = proposalsFor[user];
         Proposal[] memory incoming = new Proposal[](proposers.length);
 
@@ -527,7 +656,9 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @dev Get proposal info for a proposer
-    function getProposal(address proposer) external view returns (Proposal memory) {
+    function getProposal(
+        address proposer
+    ) external view returns (Proposal memory) {
         return proposals[proposer];
     }
 
@@ -537,27 +668,42 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @dev Get the current pending yield for a couple
-    function getPendingYield(address a, address b) external view returns (uint256) {
+    function getPendingYield(
+        address a,
+        address b
+    ) external view returns (uint256) {
         return _pendingYield(_getBondId(a, b));
     }
 
     /// @dev Get the current milestone year for a couple
-    function getCurrentMilestoneYear(address a, address b) external view returns (uint256) {
+    function getCurrentMilestoneYear(
+        address a,
+        address b
+    ) external view returns (uint256) {
         return bonds[_getBondId(a, b)].lastMilestoneYear;
     }
 
     /// @dev Get the bond start timestamp for a couple
-    function getBondStart(address a, address b) external view returns (uint256) {
+    function getBondStart(
+        address a,
+        address b
+    ) external view returns (uint256) {
         return bonds[_getBondId(a, b)].bondStart;
     }
 
     /// @dev Get the dissolution request details for a couple, if any
-    function getDissolutionRequest(address a, address b) external view returns (DissolutionRequest memory) {
+    function getDissolutionRequest(
+        address a,
+        address b
+    ) external view returns (DissolutionRequest memory) {
         return dissolutionRequests[_getBondId(a, b)];
     }
 
     /// @dev Get a read-only view struct for a couple's bond details
-    function getBondView(address a, address b) external view returns (BondView memory v) {
+    function getBondView(
+        address a,
+        address b
+    ) external view returns (BondView memory v) {
         bytes32 id = _getBondId(a, b);
         Bond memory m = bonds[id];
 
@@ -574,7 +720,9 @@ contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     }
 
     /// @dev Get user dashboard info: bond status, pending yield, TIME balance, proposal status
-    function getUserDashboard(address user) external view returns (UserDashboard memory d) {
+    function getUserDashboard(
+        address user
+    ) external view returns (UserDashboard memory d) {
         bytes32 bondId = activeBondOf[user]; //Read active bond
 
         if (bondId == bytes32(0)) {
