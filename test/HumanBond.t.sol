@@ -43,35 +43,36 @@ contract AutomationFlowTest is Test {
         milestoneNft.setMilestoneURI(4, "ipfs://dummy4");
         milestoneNft.freezeMilestones();
 
-        // Deploy HumanBond using the mock
-        humanBond = new HumanBond(
+        // Deploy HumanBond and initialize
+        humanBond = new HumanBond();
+        humanBond.initialize(
             address(worldId),
             address(bondNft),
             address(timeToken),
             address(milestoneNft),
             "app_test",
             "propose-bond",
-            "accept-bond",
-            1 minutes,
-            3 minutes,
-            5 minutes
+            "accept-bond"
         );
+
+        humanBond.setDayDuration(1 minutes);
+        humanBond.setYearDuration(3 minutes);
+        humanBond.setRebondCooldown(5 minutes);
+        // Make dissolution timelock instant so tests don't accumulate extra yield
+        humanBond.setDissolutionDelay(0);
 
         // Wire up
         milestoneNft.setHumanBondContract(address(humanBond));
         bondNft.setHumanBondContract(address(humanBond));
         timeToken.setMinter(address(humanBond), true);
 
-        // Make dissolution timelock instant so tests don't accumulate extra yield
-        humanBond.setDissolutionDelay(0);
-
         // Give ETH
         vm.deal(leticia, 10 ether);
         vm.deal(bob, 10 ether);
 
-        // Push block.timestamp past REBOND_COOLDOWN so fresh users (lastDissolutionTimestamp=0)
+        // Push block.timestamp past rebondCooldown so fresh users (lastDissolutionTimestamp=0)
         // don't hit HumanBond__CooldownActive. Foundry starts at timestamp=1 which is < cooldown.
-        vm.warp(humanBond.REBOND_COOLDOWN() + 1);
+        vm.warp(humanBond.rebondCooldown() + 1);
     }
 
     //============================ MODIFIERS ============================//
@@ -147,7 +148,7 @@ contract AutomationFlowTest is Test {
         _dissolution(leticia, bob);
 
         // Wait out the dissolution cooldown before rebonding
-        skip(humanBond.REBOND_COOLDOWN() + 1);
+        skip(humanBond.rebondCooldown() + 1);
 
         vm.startPrank(leticia);
         humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
@@ -581,6 +582,8 @@ contract AutomationFlowTest is Test {
     }
 
     function test_executeDissolution_reverts_ifDelayNotMet() public bondedCouple {
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.DissolutionDelayUpdated(3 days);
         humanBond.setDissolutionDelay(3 days);
 
         vm.prank(leticia);
@@ -947,7 +950,7 @@ contract AutomationFlowTest is Test {
         _dissolution(leticia, bob);
 
         // Wait out cooldown and rebond
-        skip(humanBond.REBOND_COOLDOWN() + 1);
+        skip(humanBond.rebondCooldown() + 1);
 
         vm.prank(leticia);
         humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
@@ -1071,5 +1074,228 @@ contract AutomationFlowTest is Test {
         vm.prank(address(humanBond));
         vm.expectRevert(TimeToken.NotAuthorized.selector);
         timeToken.authorizedBurn(leticia, 5 ether);
+    }
+
+    //============================== SETTERS MANAGEMENT =================================//
+    //===================================================================================//
+
+    // ---- setWorldId ----
+
+    function test_setWorldId_reverts_ifNotOwner() public {
+        vm.prank(leticia);
+        vm.expectRevert();
+        humanBond.setWorldId(address(0x99));
+    }
+
+    function test_setWorldId_reverts_ifZeroAddress() public {
+        vm.expectRevert(HumanBond.HumanBond__InvalidAddress.selector);
+        humanBond.setWorldId(address(0));
+    }
+
+    function test_setWorldId_updatesWorldId() public {
+        address newWorldId = address(0xBEEF);
+        humanBond.setWorldId(newWorldId);
+        assertEq(address(humanBond.worldId()), newWorldId);
+    }
+
+    function test_setWorldId_emits_WorldIdUpdated() public {
+        address newWorldId = address(0xBEEF);
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.WorldIdUpdated(newWorldId);
+        humanBond.setWorldId(newWorldId);
+    }
+
+    // ---- setRebondCooldown ----
+
+    function test_setRebondCooldown_reverts_ifNotOwner() public {
+        vm.prank(leticia);
+        vm.expectRevert();
+        humanBond.setRebondCooldown(1 days);
+    }
+
+    function test_setRebondCooldown_updatesValue() public {
+        humanBond.setRebondCooldown(7 days);
+        assertEq(humanBond.rebondCooldown(), 7 days);
+    }
+
+    function test_setRebondCooldown_emits_RebondCooldownUpdated() public {
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.RebondCooldownUpdated(7 days);
+        humanBond.setRebondCooldown(7 days);
+    }
+
+    function test_setRebondCooldown_zero_allowsImmediateRebond() public bondedCouple {
+        _dissolution(leticia, bob);
+
+        // Set cooldown to zero — leticia can propose immediately
+        humanBond.setRebondCooldown(0);
+
+        vm.prank(leticia);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
+    }
+
+    function test_setRebondCooldown_enforcesNewPeriod() public bondedCouple {
+        _dissolution(leticia, bob);
+
+        // Extend cooldown to 30 days — leticia should be blocked
+        humanBond.setRebondCooldown(30 days);
+
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__CooldownActive.selector);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
+
+        // After waiting the full new cooldown she can propose again
+        skip(30 days + 1);
+        vm.prank(leticia);
+        humanBond.propose(bob, ROOT, NULLIFIER_PROPOSE, proof);
+    }
+
+    // ---- setDayDuration ----
+
+    function test_setDayDuration_reverts_ifNotOwner() public {
+        vm.prank(leticia);
+        vm.expectRevert();
+        humanBond.setDayDuration(2 minutes);
+    }
+
+    function test_setDayDuration_updatesValue() public {
+        humanBond.setDayDuration(2 minutes);
+        assertEq(humanBond.dayDuration(), 2 minutes);
+    }
+
+    function test_setDayDuration_emits_DayDurationUpdated() public {
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.DayDurationUpdated(2 minutes);
+        humanBond.setDayDuration(2 minutes);
+    }
+
+    function test_setDayDuration_affectsYieldCalculation() public bondedCouple {
+        // Change day duration to 2 minutes (double the default 1 minute)
+        humanBond.setDayDuration(2 minutes);
+
+        // After 10 minutes with a 2-minute day → 5 days → 5 ether
+        skip(10 minutes);
+        uint256 pending = humanBond.getPendingYield(leticia, bob);
+        assertEq(pending, 5 ether);
+    }
+
+    // ---- setYearDuration ----
+
+    function test_setYearDuration_reverts_ifNotOwner() public {
+        vm.prank(leticia);
+        vm.expectRevert();
+        humanBond.setYearDuration(10 minutes);
+    }
+
+    function test_setYearDuration_updatesValue() public {
+        humanBond.setYearDuration(10 minutes);
+        assertEq(humanBond.yearDuration(), 10 minutes);
+    }
+
+    function test_setYearDuration_emits_YearDurationUpdated() public {
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.YearDurationUpdated(10 minutes);
+        humanBond.setYearDuration(10 minutes);
+    }
+
+    function test_setYearDuration_affectsMilestoneEligibility() public bondedCouple {
+        // Set year duration to 10 minutes (longer than default 3 minutes)
+        humanBond.setYearDuration(10 minutes);
+
+        // After only 5 minutes — not yet a full year with new duration
+        skip(5 minutes);
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__NothingToClaim.selector);
+        humanBond.manualCheckAndMint(bob);
+
+        // After 10 minutes — one year has passed with the new duration
+        skip(5 minutes + 1);
+        vm.prank(leticia);
+        humanBond.manualCheckAndMint(bob);
+        assertEq(humanBond.getCurrentMilestoneYear(leticia, bob), 1);
+    }
+
+    // ---- setDissolutionDelay ----
+
+    function test_setDissolutionDelay_reverts_ifNotOwner() public {
+        vm.prank(leticia);
+        vm.expectRevert();
+        humanBond.setDissolutionDelay(7 days);
+    }
+
+    function test_setDissolutionDelay_updatesValue() public {
+        humanBond.setDissolutionDelay(7 days);
+        assertEq(humanBond.dissolutionDelay(), 7 days);
+    }
+
+    function test_setDissolutionDelay_enforcesNewDelay() public bondedCouple {
+        humanBond.setDissolutionDelay(10 days);
+
+        vm.prank(leticia);
+        humanBond.requestDissolution(bob);
+
+        // Attempting execution before the new delay elapses should revert
+        skip(5 days);
+        vm.prank(leticia);
+        vm.expectRevert(HumanBond.HumanBond__DissolutionDelayNotMet.selector);
+        humanBond.executeDissolution(bob);
+
+        // After the full delay it succeeds
+        skip(5 days + 1);
+        vm.prank(leticia);
+        humanBond.executeDissolution(bob);
+        assertEq(humanBond.isBonded(leticia, bob), false);
+    }
+
+    // ---- setBondNft ----
+
+    function test_setBondNft_reverts_ifNotOwner() public {
+        vm.prank(leticia);
+        vm.expectRevert();
+        humanBond.setBondNft(address(0x99));
+    }
+
+    function test_setBondNft_reverts_ifZeroAddress() public {
+        vm.expectRevert(HumanBond.HumanBond__InvalidAddress.selector);
+        humanBond.setBondNft(address(0));
+    }
+
+    function test_setBondNft_updatesValue() public {
+        address newBondNft = address(new BondNFT());
+        humanBond.setBondNft(newBondNft);
+        assertEq(address(humanBond.bondNft()), newBondNft);
+    }
+
+    function test_setBondNft_emits_BondNftUpdated() public {
+        address newBondNft = address(new BondNFT());
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.BondNftUpdated(newBondNft);
+        humanBond.setBondNft(newBondNft);
+    }
+
+    // ---- setMilestoneNft ----
+
+    function test_setMilestoneNft_reverts_ifNotOwner() public {
+        vm.prank(leticia);
+        vm.expectRevert();
+        humanBond.setMilestoneNft(address(0x99));
+    }
+
+    function test_setMilestoneNft_reverts_ifZeroAddress() public {
+        vm.expectRevert(HumanBond.HumanBond__InvalidAddress.selector);
+        humanBond.setMilestoneNft(address(0));
+    }
+
+    function test_setMilestoneNft_updatesValue() public {
+        address newMilestoneNft = address(new MilestoneNFT());
+        humanBond.setMilestoneNft(newMilestoneNft);
+        assertEq(address(humanBond.milestoneNft()), newMilestoneNft);
+    }
+
+    function test_setMilestoneNft_emits_MilestoneNftUpdated() public {
+        address newMilestoneNft = address(new MilestoneNFT());
+        vm.expectEmit(address(humanBond));
+        emit HumanBond.MilestoneNftUpdated(newMilestoneNft);
+        humanBond.setMilestoneNft(newMilestoneNft);
     }
 }

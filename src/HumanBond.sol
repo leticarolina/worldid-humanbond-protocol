@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import {Ownable} from "openzeppelin-contracts/contracts/access/Ownable.sol";
+import {OwnableUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/access/OwnableUpgradeable.sol";
+import {UUPSUpgradeable} from "openzeppelin-contracts-upgradeable/contracts/proxy/utils/UUPSUpgradeable.sol";
+import {Initializable} from "openzeppelin-contracts-upgradeable/contracts/proxy/utils/Initializable.sol";
 import {BondNFT} from "./BondNFT.sol";
 import {TimeToken} from "./TimeToken.sol";
 import {MilestoneNFT} from "./MilestoneNFT.sol";
@@ -15,7 +17,7 @@ import {IWorldID} from "./helpers/IWorldID.sol";
  *  @dev Uses World ID verification to confirm both users are real humans,
  *      then mints dynamic metadata NFTs and TIME ERC-20 tokens for a verified bond.
  */
-contract HumanBond is Ownable {
+contract HumanBond is Initializable, OwnableUpgradeable, UUPSUpgradeable {
     using ByteHasher for bytes;
 
     error HumanBond__UserAlreadyBonded();
@@ -32,7 +34,7 @@ contract HumanBond is Ownable {
     error HumanBond__DissolutionDelayNotMet();
 
     /* ----------------------------- STRUCTS ----------------------------- */
-    //Represents a pending bond request:
+    //Represents a pending bond request
     struct Proposal {
         address proposer;
         address proposed;
@@ -76,31 +78,33 @@ contract HumanBond is Ownable {
         uint256 timeBalance;
     }
 
+    /* --------------------------- CONSTANTS --------------------------- */
+    uint256 public constant GROUP_ID = 1; // World ID Orb-only group
+
     /* --------------------------- STATE VARS --------------------------- */
-    mapping(address => Proposal) public proposals;
-    mapping(address => address[]) public proposalsFor; // proposed address => array of proposers
-    mapping(address => uint256) public proposerIndex; // proposer address => index in proposalsFor[proposed]
-    mapping(bytes32 => Bond) public bonds;
-    mapping(address => bytes32) public activeBondOf; // quick lookup of active bond ID by user address
-    mapping(address => uint256) public lastDissolutionTimestamp;
-    mapping(bytes32 => DissolutionRequest) public dissolutionRequests;
-
-    bytes32[] public bondIds; //So every couple has a unique “bond fingerprint”
-
-    IWorldID public immutable WORLD_ID;
-    BondNFT public immutable BOND_NFT;
-    TimeToken public immutable TIME_TOKEN;
-    MilestoneNFT public immutable MILESTONE_NFT;
-    uint256 public immutable EXTERNAL_NULLIFIER_PROPOSE;
-    uint256 public immutable EXTERNAL_NULLIFIER_ACCEPT;
-    uint256 public immutable DAY; // 1 day = 1 TIME token reward shared
-    uint256 public immutable YEAR; // 1 YEAR = new milestone NFT eligibility
-    uint256 public immutable REBOND_COOLDOWN; // time after dissolution during which a user cannot propose or accept new bonds
-    uint256 public constant GROUP_ID = 1; // World ID Orb-only group. Required by World ID Route
-    uint256 public dissolutionDelay = 3 days; // delay for dissolution to be finalized
-
+    IWorldID public worldId; // World ID contract for proof verification
+    BondNFT public bondNft;
+    TimeToken public timeToken;
+    MilestoneNFT public milestoneNft;
+    uint256 public externalNullifierPropose;
+    uint256 public externalNullifierAccept;
+    uint256 public dayDuration;
+    uint256 public yearDuration;
+    uint256 public rebondCooldown;
+    uint256 public dissolutionDelay;
     uint256 public activeBondCount;
     uint256 public totalDissolutionCount;
+
+    mapping(address => Proposal) public proposals; // proposer address => Proposal struct
+    mapping(address => address[]) public proposalsFor; // proposed address => array of proposers
+    mapping(address => uint256) public proposerIndex; // proposer address => index in proposalsFor[proposed]
+    mapping(bytes32 => Bond) public bonds; // bondId (hash of two partner addresses) => Bond struct
+    mapping(address => bytes32) public activeBondOf; // lookup of active bond ID by user address
+    mapping(address => uint256) public lastDissolutionTimestamp; // tracks last dissolution time for cooldown enforcement
+    mapping(bytes32 => DissolutionRequest) public dissolutionRequests; // bondId => dissolution request details
+    bytes32[] public bondIds; // every couple has a unique “bond fingerprint”
+
+    uint256[30] private __gap;
 
     /* ----------------------------- EVENTS ----------------------------- */
     event ProposalCreated(address indexed proposer, address indexed proposed, uint256 timestamp);
@@ -114,35 +118,40 @@ contract HumanBond is Ownable {
         address indexed partnerA, address indexed partnerB, address indexed requester, uint256 timestamp
     );
     event DissolutionRequestCancelled(address indexed partnerA, address indexed partnerB, uint256 timestamp);
+    event WorldIdUpdated(address indexed newWorldId);
+    event RebondCooldownUpdated(uint256 newCooldown);
+    event DayDurationUpdated(uint256 newDayDuration);
+    event YearDurationUpdated(uint256 newYearDuration);
+    event DissolutionDelayUpdated(uint256 newDissolutionDelay);
+    event BondNftUpdated(address indexed newBondNft);
+    event MilestoneNftUpdated(address indexed newMilestoneNft);
 
-    /* --------------------------- CONSTRUCTOR -------------------------- */
-    constructor(
+    /* --------------------------- INITIALIZER -------------------------- */
+    function initialize(
         address _worldIdRouter,
         address _bondNft,
         address _timeToken,
         address _milestoneNft,
         string memory _appId,
         string memory _actionPropose,
-        string memory _actionAccept,
-        uint256 _day,
-        uint256 _year,
-        uint256 _dissolutionCooldown
-    ) Ownable(msg.sender) {
-        WORLD_ID = IWorldID(_worldIdRouter);
-        BOND_NFT = BondNFT(_bondNft);
-        TIME_TOKEN = TimeToken(_timeToken);
-        MILESTONE_NFT = MilestoneNFT(_milestoneNft);
+        string memory _actionAccept
+    ) public initializer {
+        __Ownable_init(msg.sender);
 
-        // Compute external nullifiers exactly as World ID expects, define action domain for proofs
-        EXTERNAL_NULLIFIER_PROPOSE =
+        worldId = IWorldID(_worldIdRouter);
+        bondNft = BondNFT(_bondNft);
+        timeToken = TimeToken(_timeToken);
+        milestoneNft = MilestoneNFT(_milestoneNft);
+        externalNullifierPropose =
             abi.encodePacked(abi.encodePacked(_appId).hashToField(), _actionPropose).hashToField();
-
-        EXTERNAL_NULLIFIER_ACCEPT =
-            abi.encodePacked(abi.encodePacked(_appId).hashToField(), _actionAccept).hashToField();
-        DAY = _day;
-        YEAR = _year;
-        REBOND_COOLDOWN = _dissolutionCooldown;
+        externalNullifierAccept = abi.encodePacked(abi.encodePacked(_appId).hashToField(), _actionAccept).hashToField();
+        dayDuration = 1 days;
+        yearDuration = 365 days;
+        rebondCooldown = 30 days;
+        dissolutionDelay = 3 days;
     }
+
+    function _authorizeUpgrade(address newImplementation) internal override onlyOwner {}
 
     /* ---------------------------- FUNCTIONS --------------------------- */
 
@@ -152,7 +161,7 @@ contract HumanBond is Ownable {
     /// @param proposerNullifier The unique nullifier preventing proof re-use.
     /// @param proof The zero-knowledge proof array.
     function propose(address proposed, uint256 root, uint256 proposerNullifier, uint256[8] calldata proof) external {
-        if (block.timestamp - lastDissolutionTimestamp[msg.sender] < REBOND_COOLDOWN) {
+        if (block.timestamp - lastDissolutionTimestamp[msg.sender] < rebondCooldown) {
             revert HumanBond__CooldownActive();
         }
         if (proposed == address(0)) {
@@ -167,14 +176,14 @@ contract HumanBond is Ownable {
         if (activeBondOf[msg.sender] != bytes32(0) || activeBondOf[proposed] != bytes32(0)) {
             revert HumanBond__UserAlreadyBonded();
         }
-        uint256 signalHash = abi.encodePacked(msg.sender).hashToField(); //prove msg.sender is signer
-        // Verify proposer is a real human via World ID
-        WORLD_ID.verifyProof(root, GROUP_ID, signalHash, proposerNullifier, EXTERNAL_NULLIFIER_PROPOSE, proof);
+        uint256 signalHash = abi.encodePacked(msg.sender).hashToField();
 
-        //Store proposal
+        // Verify proposer is a real human via World ID
+        worldId.verifyProof(root, GROUP_ID, signalHash, proposerNullifier, externalNullifierPropose, proof);
+
         proposals[msg.sender] = Proposal({proposer: msg.sender, proposed: proposed, timestamp: block.timestamp});
 
-        _addProposal(msg.sender, proposed); //track who proposed to whom
+        _addProposal(msg.sender, proposed);
 
         emit ProposalCreated(msg.sender, proposed, block.timestamp);
     }
@@ -185,10 +194,10 @@ contract HumanBond is Ownable {
     /// @param acceptorNullifier The unique nullifier preventing proof re-use.
     /// @param proof The zero-knowledge proof array.
     function accept(address proposer, uint256 root, uint256 acceptorNullifier, uint256[8] calldata proof) external {
-        Proposal storage proposal = proposals[proposer]; // the struct stored, previously created in propose()
+        Proposal storage proposal = proposals[proposer];
         uint256 signalHash = abi.encodePacked(msg.sender).hashToField();
 
-        if (block.timestamp - lastDissolutionTimestamp[msg.sender] < REBOND_COOLDOWN) {
+        if (block.timestamp - lastDissolutionTimestamp[msg.sender] < rebondCooldown) {
             revert HumanBond__CooldownActive();
         }
 
@@ -199,13 +208,12 @@ contract HumanBond is Ownable {
             revert HumanBond__UserAlreadyBonded();
         } //not reaching, propose function reverts before
 
-        // Verify acceptor is also a real human
-        WORLD_ID.verifyProof(
+        worldId.verifyProof(
             root,
             GROUP_ID,
             signalHash, // signal = sender address
             acceptorNullifier,
-            EXTERNAL_NULLIFIER_ACCEPT,
+            externalNullifierAccept,
             proof
         );
 
@@ -215,7 +223,7 @@ contract HumanBond is Ownable {
             revert HumanBond__UserAlreadyBonded();
         }
 
-        // Record bond data
+        // Records bond data
         bonds[bondId] = Bond({
             partnerA: proposer,
             partnerB: msg.sender,
@@ -229,7 +237,7 @@ contract HumanBond is Ownable {
         activeBondOf[msg.sender] = bondId;
         activeBondCount++;
 
-        bool crossProposed = proposals[msg.sender].proposed == proposer; //check if acceptor also proposed to proposer, if so clean up that proposal too
+        bool crossProposed = proposals[msg.sender].proposed == proposer; //check if acceptor also proposed to proposer
         delete proposals[proposer]; // clear proposer's outgoing proposal
         delete proposals[msg.sender]; // clear acceptor's outgoing proposal if one exists
         _removeProposal(proposer, msg.sender); // remove proposer from acceptor's incoming list
@@ -237,20 +245,15 @@ contract HumanBond is Ownable {
 
         bondIds.push(bondId);
 
-        // Mint identical NFTs for both partners
-        BOND_NFT.mintBondNft(proposer, proposer, msg.sender, block.timestamp, bondId);
-        BOND_NFT.mintBondNft(msg.sender, proposer, msg.sender, block.timestamp, bondId);
+        // Mint BondNFTs for both partners
+        bondNft.mintBondNft(proposer, proposer, msg.sender, block.timestamp, bondId);
+        bondNft.mintBondNft(msg.sender, proposer, msg.sender, block.timestamp, bondId);
 
-        // Reward both parties with 1 TOKEN immediately
-        TIME_TOKEN.mint(proposer, 1 ether);
-        TIME_TOKEN.mint(msg.sender, 1 ether);
+        // Reward both parties with 1 TOKEN
+        timeToken.mint(proposer, 1 ether);
+        timeToken.mint(msg.sender, 1 ether);
 
         emit ProposalAccepted(proposer, msg.sender, block.timestamp);
-    }
-
-    /// @notice Owner can adjust the required waiting period between request and execution.
-    function setDissolutionDelay(uint256 _delay) external onlyOwner {
-        dissolutionDelay = _delay;
     }
 
     /// @notice Initiate a dissolution request. The requesting partner must wait dissolutionDelay before executing.
@@ -273,6 +276,7 @@ contract HumanBond is Ownable {
     }
 
     /// @notice Execute a previously requested dissolution once the delay has elapsed.
+    ///        Rewards any pending yield, then marks the bond as inactive and updates dissolution timestamps.
     function executeDissolution(address partner) external {
         bytes32 bondId = _getBondId(msg.sender, partner);
         Bond storage bond = bonds[bondId];
@@ -286,11 +290,6 @@ contract HumanBond is Ownable {
         }
 
         uint256 reward = _pendingYield(bondId);
-        if (reward > 0) {
-            uint256 split = reward / 2;
-            TIME_TOKEN.mint(bond.partnerA, split);
-            TIME_TOKEN.mint(bond.partnerB, reward - split);
-        }
 
         bond.active = false;
         bond.lastClaim = block.timestamp;
@@ -303,6 +302,12 @@ contract HumanBond is Ownable {
         activeBondOf[bond.partnerB] = bytes32(0);
 
         delete dissolutionRequests[bondId];
+
+        if (reward > 0) {
+            uint256 split = reward / 2;
+            timeToken.mint(bond.partnerA, split);
+            timeToken.mint(bond.partnerB, reward - split);
+        }
 
         emit BondDissolved(bond.partnerA, bond.partnerB, block.timestamp);
     }
@@ -322,12 +327,12 @@ contract HumanBond is Ownable {
     }
 
     /* ---------------------------- YIELD LOGIC --------------------------- */
-    /// @dev Calculate pending yield for a bond, 1 token per day shared.
+    /// @dev Calculate pending yield for a bond based on time elapsed since last claim.
     /// @param bondId The unique ID representing the bond.
     function _pendingYield(bytes32 bondId) internal view returns (uint256) {
         Bond storage bond = bonds[bondId];
         if (!bond.active) return 0;
-        uint256 daysElapsed = (block.timestamp - bond.lastClaim) / DAY;
+        uint256 daysElapsed = (block.timestamp - bond.lastClaim) / dayDuration;
         return daysElapsed * 1 ether;
     }
 
@@ -344,11 +349,11 @@ contract HumanBond is Ownable {
         }
 
         uint256 split = reward / 2;
-
-        TIME_TOKEN.mint(bond.partnerA, split);
-        TIME_TOKEN.mint(bond.partnerB, reward - split); // captures remainder
-
         bond.lastClaim = block.timestamp;
+
+        timeToken.mint(bond.partnerA, split);
+        timeToken.mint(bond.partnerB, reward - split);
+
         emit YieldClaimed(bond.partnerA, bond.partnerB, split);
     }
 
@@ -357,8 +362,8 @@ contract HumanBond is Ownable {
     /// @notice Manually check and mint milestone NFTs for both partners based on years together.
     ///         if they missed previous years, mint all missing years up to current.
     function manualCheckAndMint(address partner) external {
-        bytes32 id = _getBondId(msg.sender, partner); //get the deterministic bondId of the couple
-        Bond storage m = bonds[id]; // get the bond struct based on the id
+        bytes32 id = _getBondId(msg.sender, partner);
+        Bond storage m = bonds[id];
 
         if (!m.active) revert HumanBond__NoActiveBond();
 
@@ -369,9 +374,9 @@ contract HumanBond is Ownable {
         }
 
         uint256 bondStart = m.bondStart; // when the bond started
-        uint256 yearsTogether = (block.timestamp - bondStart) / YEAR; // how many years together
+        uint256 yearsTogether = (block.timestamp - bondStart) / yearDuration; // how many years together
         uint256 lastClaimed = m.lastMilestoneYear; // the last milestone year they claimed NFTs for
-        uint256 highestYearSet = MILESTONE_NFT.latestYear(); // the max year defined by MilestoneNFT
+        uint256 highestYearSet = milestoneNft.latestYear(); // the max year defined by MilestoneNFT
 
         // If no milestones set since last claim or zero years together, revert
         if (yearsTogether <= lastClaimed || yearsTogether == 0) {
@@ -395,8 +400,8 @@ contract HumanBond is Ownable {
         internal
     {
         for (uint256 y = startYear; y <= endYear;) {
-            MILESTONE_NFT.mintMilestone(a, y, a, b, id, bondStart);
-            MILESTONE_NFT.mintMilestone(b, y, a, b, id, bondStart);
+            milestoneNft.mintMilestone(a, y, a, b, id, bondStart);
+            milestoneNft.mintMilestone(b, y, a, b, id, bondStart);
 
             emit AnniversaryAchieved(a, b, y, block.timestamp);
 
@@ -461,6 +466,52 @@ contract HumanBond is Ownable {
     ///      Order of addresses does not matter.
     function _getBondId(address a, address b) internal pure returns (bytes32) {
         return a < b ? keccak256(abi.encodePacked(a, b)) : keccak256(abi.encodePacked(b, a));
+    }
+
+    /* --------------------------- SETTERS MANAGEMENT -------------------------- */
+    /// @notice Owner can update the World ID router address (e.g. for 4.0 migration).
+    function setWorldId(address _worldId) external onlyOwner {
+        if (_worldId == address(0)) revert HumanBond__InvalidAddress();
+        worldId = IWorldID(_worldId);
+        emit WorldIdUpdated(_worldId);
+    }
+
+    /// @notice Owner can update the rebond cooldown period.
+    function setRebondCooldown(uint256 _cooldown) external onlyOwner {
+        rebondCooldown = _cooldown;
+        emit RebondCooldownUpdated(_cooldown);
+    }
+
+    /// @notice Owner can adjust the required waiting period between request and execution.
+    function setDissolutionDelay(uint256 _delay) external onlyOwner {
+        dissolutionDelay = _delay;
+        emit DissolutionDelayUpdated(_delay);
+    }
+
+    /// @notice Owner can update the day duration for yield calculation.
+    function setDayDuration(uint256 _day) external onlyOwner {
+        dayDuration = _day;
+        emit DayDurationUpdated(_day);
+    }
+
+    /// @notice Owner can update the year duration for milestone eligibility.
+    function setYearDuration(uint256 _year) external onlyOwner {
+        yearDuration = _year;
+        emit YearDurationUpdated(_year);
+    }
+
+    /// @notice Owner can update the BondNFT contract address.
+    function setBondNft(address _bondNft) external onlyOwner {
+        if (_bondNft == address(0)) revert HumanBond__InvalidAddress();
+        bondNft = BondNFT(_bondNft);
+        emit BondNftUpdated(_bondNft);
+    }
+
+    /// @notice Owner can update the MilestoneNFT contract address.
+    function setMilestoneNft(address _milestoneNft) external onlyOwner {
+        if (_milestoneNft == address(0)) revert HumanBond__InvalidAddress();
+        milestoneNft = MilestoneNFT(_milestoneNft);
+        emit MilestoneNftUpdated(_milestoneNft);
     }
 
     /* --------------------------- GETTERS FUNCTIONS -------------------------- */
@@ -549,7 +600,7 @@ contract HumanBond is Ownable {
             d.partner = address(0);
             d.pendingYield = 0;
             d.hasProposal = proposals[user].proposer != address(0);
-            d.timeBalance = TIME_TOKEN.balanceOf(user);
+            d.timeBalance = timeToken.balanceOf(user);
             return d;
         }
 
@@ -558,7 +609,7 @@ contract HumanBond is Ownable {
         d.isBonded = m.active;
         d.partner = (m.partnerA == user) ? m.partnerB : m.partnerA;
         d.pendingYield = _pendingYield(bondId);
-        d.timeBalance = TIME_TOKEN.balanceOf(user);
+        d.timeBalance = timeToken.balanceOf(user);
         d.hasProposal = proposals[user].proposer != address(0);
     }
 }

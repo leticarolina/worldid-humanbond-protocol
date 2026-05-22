@@ -68,7 +68,7 @@ contract BondNFTTest is Test {
 
         assertTrue(_startsWith(uri, "data:application/json;base64,"), "must return data URI");
         // check the contract stores the expected imageCID (tokenURI is built from this)
-        assertEq(bond.imageCid(), "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai");
+        assertEq(bond.imageURI(), "ipfs://bafkreieeq6mqrapuwa5uceqcno6xn5cryicidq6z27xpmdlw5l3z5v2dsu");
     }
 
     function test_console_log_tokenURI_for_manual_inspection() public {
@@ -88,14 +88,14 @@ contract BondNFTTest is Test {
        Access control tests
        --------------------------- */
 
-    function test_setImageCID_onlyOwner() public {
-        bond.setImageCid("ipfs://12345"); // owner (this contract) can set
-        assertEq(bond.imageCid(), "ipfs://12345");
+    function test_setImageURI_onlyOwner() public {
+        bond.setImageURI("ipfs://12345"); // owner (this contract) can set
+        assertEq(bond.imageURI(), "ipfs://12345");
 
         // non-owner cannot
         vm.prank(address(0x999));
         vm.expectRevert(); // Ownable reverts
-        bond.setImageCid("ipfs://54321");
+        bond.setImageURI("ipfs://54321");
     }
 
     function test_setHumanBondContract_onlyOwner() public {

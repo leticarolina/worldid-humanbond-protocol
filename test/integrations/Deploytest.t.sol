@@ -17,18 +17,20 @@ contract DeployTest is Test {
         MilestoneNFT mile = new MilestoneNFT();
         TimeToken time = new TimeToken();
 
-        HumanBond hb = new HumanBond(
+        HumanBond hb = new HumanBond();
+        hb.initialize(
             0x17B354dD2595411ff79041f930e491A4Df39A278,
             address(bond),
             address(time),
             address(mile),
             "app_bfc3261816aeadc589f9c6f80a98f5df",
             "propose-bond",
-            "accept-bond",
-            1 days,
-            365 days,
-            30 days
+            "accept-bond"
         );
+
+        hb.setDayDuration(1 minutes);
+        hb.setYearDuration(3 minutes);
+        hb.setRebondCooldown(5 minutes);
 
         // Set milestone URIs
         mile.setMilestoneURI(1, "ipfs://QmPAVmWBuJnNgrGrAp34CqTa13VfKkEZkZak8d6E4MJio8");
