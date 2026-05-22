@@ -49,6 +49,7 @@ contract DeployScript is Script {
         //Link contracts to proxy address
         milestoneNft.setHumanBondContract(address(humanBond)); //Link MilestoneNFT to HumanBond
         bondNft.setHumanBondContract(address(humanBond));
+        bondNft.setImageURI("ipfs://bafkreieeq6mqrapuwa5uceqcno6xn5cryicidq6z27xpmdlw5l3z5v2dsu");
         timeToken.setMinter(address(humanBond), true);
 
         vm.stopBroadcast();
@@ -57,6 +58,6 @@ contract DeployScript is Script {
         console.log("BondNFT deployed at:", address(bondNft));
         console.log("MilestoneNFT deployed at:", address(milestoneNft));
         console.log("HumanBond deployed at:", address(humanBond));
-        console.log("HumanBond proxy at:", address(humanBond));
+        console.log("Proxy at:", address(proxy));
     }
 }

@@ -20,7 +20,7 @@ contract BondNFT is ERC721, Ownable {
     error BondNFT__InvalidAddress();
     uint256 public totalSupply;
 
-    string public imageURI = "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai"; //placeholder image URI
+    string public imageURI = "ipfs://bafkreieeq6mqrapuwa5uceqcno6xn5cryicidq6z27xpmdlw5l3z5v2dsu";
 
     address public humanBondContract; //authorized minter address
     mapping(uint256 => TokenMetadata) public tokenMetadata;
@@ -65,7 +65,6 @@ contract BondNFT is ERC721, Ownable {
     }
 
     /// @notice Mint a Bond NFT to a given address.
-    //only HumanBond contract can mint
     function mintBondNft(address to, address _partnerA, address _partnerB, uint256 _bondStart, bytes32 _bondId)
         external
         onlyHumanBond

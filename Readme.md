@@ -7,8 +7,8 @@ On-chain bonds, yield, milestones & relationship-proof infrastructure.
 1. [Introduction](#introduction)
 2. [Smart Contracts](#smart-contracts)
 3. [Protocol Overview](#protocol-overview)
-4. [View & Getter Functions](#view--getter-functions)
-5. [Refactoring History](#refactoring-history)
+4. [Refactoring History](#refactoring-history)
+5. [View & Getter Functions](#view--getter-functions)
 6. [Author](#written-and-refactored-by)
 
 ---
@@ -36,20 +36,21 @@ The protocol handles everything autonomously: proposals, acceptance, yield, mile
 
 ### World Chain Mainnet
 
-- **HumanBond (Core Engine)**: [0xB3cbCB0294995FE1aCD7187B94aEDBD4555c5A63](https://worldscan.org/address/0xB3cbCB0294995FE1aCD7187B94aEDBD4555c5A63)
-- **BondNFT (Soulbound)**: [0x8c64c304854F9284ddb976918dF37Bd4f5949F22](https://worldscan.org/address/0x8c64c304854F9284ddb976918dF37Bd4f5949F22)
-- **MilestoneNFT (Soulbound)**: [0x566c4a366625F08A714dd092f8bD2F0E86f906f5](https://worldscan.org/address/0x566c4a366625F08A714dd092f8bD2F0E86f906f5)
-- **TIME Token**: [0x39e629681a9db65D9352961d8dCD4C96C4A1169a](https://worldscan.org/address/0x39e629681a9db65D9352961d8dCD4C96C4A1169a)
+- **HumanBond Proxy (Core Engine)**: [0xc14803e47D19eD0F305E16d462d97c6d4D2a2A93](https://worldscan.org/address/0xc14803e47D19eD0F305E16d462d97c6d4D2a2A93)
+- **HumanBond Implementation 1**: [0x38b9f58fBF0Fd242d12512fC98e8a53e64c8e814](https://worldscan.org/address/0x38b9f58fBF0Fd242d12512fC98e8a53e64c8e814)
+- **BondNFT (Soulbound)**: [0x26860bC82B257ed139e33bC6BB185d748aB7b9dc](https://worldscan.org/address/0x26860bC82B257ed139e33bC6BB185d748aB7b9dc)
+- **MilestoneNFT (Soulbound)**: [0xA98F4B954009559335085B36f1024A165024D3E0](https://worldscan.org/address/0xA98F4B954009559335085B36f1024A165024D3E0)
+- **TIME Token**: [0x65E4d2C637C1adf1a92839D91DB8bE1e63EE864f](https://worldscan.org/address/0x65E4d2C637C1adf1a92839D91DB8bE1e63EE864f)
 
 ### Contract Responsibilities
 
-**HumanBond.sol** → Core logic: proposals, bond activation, two-step dissolution, cooldown enforcement, yield accrual, milestone triggering.
+**HumanBond.sol** → Core logic: proposals, bond activation, two-step dissolution, cooldown enforcement, yield accrual, milestone triggering. Deployed behind a UUPS proxy.
 
-**BondNFT.sol** → Soulbound ERC-721 minted once per partner at bond creation. Stores dynamic on-chain metadata: partner addresses, bond start timestamp, and bond ID. Full bond history per couple tracked via `bondToToken` (dynamic array — supports rebonding).
+**BondNFT.sol** → Soulbound ERC-721 minted once per partner at bond creation. Stores dynamic on-chain metadata: partner addresses, bond start timestamp, and bond ID.
 
 **MilestoneNFT.sol** → Soulbound ERC-721 collection tracking yearly anniversaries. URIs are set per year by the owner and can be frozen to prevent further changes. Supports catch-up minting for missed years. Each token stores on-chain metadata: milestone year, partner addresses, bond ID, bond start, and claim timestamp.
 
-**TimeToken.sol** → ERC-20 reward token. Accrues at 1 token per day per couple. Minting is controlled exclusively by HumanBond.
+**TimeToken.sol** → ERC-20 reward token (`TIME`). Accrues at 1 token per day per couple. Minting is controlled by authorized addresses set by the owner. Includes authorized burn functionality for future protocol integrations.
 
 ---
 
@@ -147,27 +148,6 @@ After a dissolution, both partners enter a cooldown period (`REBOND_COOLDOWN`) d
 
 ---
 
-## View & Getter Functions
-
-UI-ready read-only functions available on HumanBond:
-
-| Function | Description |
-|---|---|
-| `isBonded(address a, address b)` | Returns `true` if the two addresses have an active bond |
-| `getBondId(address a, address b)` | Returns the deterministic bond ID for a couple |
-| `getBond(address a, address b)` | Returns the full `Bond` struct |
-| `getBondView(address a, address b)` | Returns a `BondView` struct including pending yield and bond ID |
-| `getUserDashboard(address user)` | Returns `UserDashboard`: bond status (`isBonded`), partner, pending yield, TIME balance, proposal status |
-| `getIncomingProposals(address user)` | Returns all pending proposals made to a given address |
-| `getProposal(address proposer)` | Returns the outgoing proposal for a given address |
-| `hasPendingProposal(address proposer)` | Returns `true` if the address has an active outgoing proposal |
-| `getPendingYield(address a, address b)` | Returns unclaimed TIME yield for a bond |
-| `getBondStart(address a, address b)` | Returns the timestamp when the bond was created |
-| `getCurrentMilestoneYear(address a, address b)` | Returns the last milestone year claimed |
-| `getDissolutionRequest(address a, address b)` | Returns the active `DissolutionRequest` struct for a bond, if any |
-
----
-
 ## Refactoring History
 
 ### V2 — Post-Hackathon Refactor
@@ -191,6 +171,71 @@ UI-ready read-only functions available on HumanBond:
 - `lastDissolutionTimestamp` + `REBOND_COOLDOWN` — per-user cooldown after dissolution
 - `setDissolutionDelay()` — owner-adjustable dissolution waiting period
 - BondNFT: `bondToToken` tracks full bond history per couple (dynamic array, rebond-safe)
+- HumanBond converted to UUPS upgradeable proxy (ERC-1967)
+- `setBondNft`, `setMilestoneNft` — periphery contract replacement without upgrade
+- `setDayDuration`, `setYearDuration`, `setRebondCooldown`, `setDissolutionDelay`
+- Storage gap (`__gap[30]`) reserved for future upgrades
+- Full terminology refactor: marriage → bond, divorce → dissolution
+
+---
+
+## View & Getter Functions
+
+### HumanBond
+
+| Function | Returns | Description |
+|---|---|---|
+| `isBonded(address a, address b)` | `bool` | True if the two addresses have an active bond |
+| `getBondId(address a, address b)` | `bytes32` | Deterministic bond ID for a couple (order-independent) |
+| `getBond(address a, address b)` | `Bond` | Full bond struct |
+| `getBondView(address a, address b)` | `BondView` | Bond details including pending yield and bond ID |
+| `getUserDashboard(address user)` | `UserDashboard` | Bond status, partner, pending yield, TIME balance, proposal status |
+| `getIncomingProposals(address user)` | `Proposal[]` | All pending proposals made to a given address |
+| `getProposal(address proposer)` | `Proposal` | Outgoing proposal for a given address |
+| `hasPendingProposal(address proposer)` | `bool` | True if the address has an active outgoing proposal |
+| `getPendingYield(address a, address b)` | `uint256` | Unclaimed TIME yield in wei |
+| `getBondStart(address a, address b)` | `uint256` | Timestamp when the bond was created |
+| `getCurrentMilestoneYear(address a, address b)` | `uint256` | Last milestone year claimed |
+| `getDissolutionRequest(address a, address b)` | `DissolutionRequest` | Active dissolution request struct, if any |
+| `activeBondOf(address user)` | `bytes32` | Active bond ID for a user, `bytes32(0)` if none |
+| `activeBondCount()` | `uint256` | Total currently active bonds |
+| `totalDissolutionCount()` | `uint256` | Total dissolutions ever recorded |
+| `dayDuration()` | `uint256` | Duration of one yield day in seconds (default: 86400) |
+| `yearDuration()` | `uint256` | Duration of one milestone year in seconds (default: 31536000) |
+| `rebondCooldown()` | `uint256` | Cooldown period after dissolution in seconds (default: 2592000) |
+| `dissolutionDelay()` | `uint256` | Required wait between request and execution in seconds (default: 259200) |
+
+### BondNFT
+
+| Function | Returns | Description |
+|---|---|---|
+| `tokenURI(uint256 tokenId)` | `string` | Base64-encoded on-chain JSON metadata |
+| `getTokenMetadata(uint256 tokenId)` | `partnerA, partnerB, bondStart, bondId` | Raw metadata for a token |
+| `getTokensByBond(bytes32 bondId)` | `uint256[]` | Token IDs associated with a bond |
+| `totalSupply()` | `uint256` | Total BondNFTs minted |
+| `ownerOf(uint256 tokenId)` | `address` | Owner of a token |
+| `imageCid()` | `string` | Current IPFS URI used as the NFT image |
+
+### MilestoneNFT
+
+| Function | Returns | Description |
+|---|---|---|
+| `tokenURI(uint256 tokenId)` | `string` | Base64-encoded on-chain JSON metadata |
+| `tokenYear(uint256 tokenId)` | `uint256` | Milestone year this token represents |
+| `tokenData(uint256 tokenId)` | `TokenMetadata` | Full metadata: partners, bond ID, bond start, claimed at |
+| `latestYear()` | `uint256` | Highest milestone year configured |
+| `milestoneUrIs(uint256 year)` | `string` | IPFS URI for a given milestone year |
+| `totalSupply()` | `uint256` | Total MilestoneNFTs minted |
+| `frozen()` | `bool` | Whether milestone URIs are locked |
+
+### TimeToken
+
+| Function | Returns | Description |
+|---|---|---|
+| `balanceOf(address account)` | `uint256` | TIME balance in wei |
+| `totalSupply()` | `uint256` | Total TIME in circulation |
+| `authorizedMinters(address)` | `bool` | Whether an address can mint |
+| `authorizedBurners(address)` | `bool` | Whether an address can burn on behalf of users |
 
 ---
 

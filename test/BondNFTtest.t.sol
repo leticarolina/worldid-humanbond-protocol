@@ -68,7 +68,7 @@ contract BondNFTTest is Test {
 
         assertTrue(_startsWith(uri, "data:application/json;base64,"), "must return data URI");
         // check the contract stores the expected imageCID (tokenURI is built from this)
-        assertEq(bond.imageURI(), "ipfs://bafkreigg2jeevy3rhgzgnhk22vsbclszceos3jlzg4otuqal62vwokzwai");
+        assertEq(bond.imageURI(), "ipfs://bafkreieeq6mqrapuwa5uceqcno6xn5cryicidq6z27xpmdlw5l3z5v2dsu");
     }
 
     function test_console_log_tokenURI_for_manual_inspection() public {
